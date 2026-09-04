@@ -6,14 +6,18 @@
 #include <cmath>
 #include <cstddef>
 #include <execution>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <random>
+#include <string>
 #include <vector>
 
-/// Represents a point in N-dimensional space.
+// represents a point in N-dimensional space.
 template <std::size_t Dim> struct Point {
   std::array<float, Dim> coordinates{};
 
-  /// Calculates the Euclidean distance from this point to another point.
+  // calculates the euclidean distance from this point to another point.
   [[nodiscard]] float distance_to(const Point<Dim> &other) const noexcept {
     float sum_of_squares = 0.0f;
     for (std::size_t i = 0; i < Dim; ++i) {
@@ -23,40 +27,23 @@ template <std::size_t Dim> struct Point {
     return std::sqrt(sum_of_squares);
   }
 
-  /// Static helper to compute Euclidean distance between two points.
   [[nodiscard]] static float euclidean_distance(const Point<Dim> &p1,
                                                 const Point<Dim> &p2) noexcept {
     return p1.distance_to(p2);
   }
-
-  /// Backward compatibility alias for misspelled legacy method name.
-  [[nodiscard]] static float eucledianDistance(const Point<Dim> &p1,
-                                               const Point<Dim> &p2) noexcept {
-    return euclidean_distance(p1, p2);
-  }
 };
 
-/// Defines the strategy used to order/sort points within N-dimensional space.
+// defines the strategy used to order/sort points within n-dimensional space.
 enum class SortStrategy {
-  AxisAscending,  ///< Sort points along a specific coordinate axis in ascending
-                  ///< order.
-  AxisDescending, ///< Sort points along a specific coordinate axis in
-                  ///< descending order.
-  RandomShuffle,  ///< Uniformly random shuffle of point order.
-  DistanceToOriginAscending,  ///< Sort by distance from origin (0, 0, ...)
-                              ///< ascending.
-  DistanceToOriginDescending, ///< Sort by distance from origin (0, 0, ...)
-                              ///< descending.
-  Adversarial ///< Order points to maximize grid rebuilds in incremental
-              ///< closest-pair algorithms.
+  AxisAscending,
+  AxisDescending,
+  RandomShuffle,
+  DistanceToOriginAscending,
+  DistanceToOriginDescending,
+  Adversarial
 };
 
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
-
-/// Binary I/O helpers for point datasets
+// binary helpers for point datasets
 template <std::size_t Dim>
 bool save_points_to_bin(const std::string &filepath,
                         const std::vector<Point<Dim>> &points) {
@@ -113,17 +100,16 @@ bool load_points_from_bin(const std::string &filepath,
   return in.good();
 }
 
-/// Container representing an N-dimensional space populated with random points.
+// container representing an n-dimensional space.
 template <std::size_t Dim, std::size_t Size> struct Space {
   static constexpr std::size_t dimension = Dim;
   static constexpr std::size_t points_size = Size;
 
   std::vector<Point<Dim>> points;
 
-  /// Default constructor creating uninitialized vector of size Size
   Space() : points(Size) {}
 
-  /// Initializes points with uniform random coordinates in [min_val, max_val].
+  // initializes points with uniform random coordinates.
   explicit Space(float min_val, float max_val, uint64_t seed = 42)
       : points(Size) {
     std::mt19937_64 gen(seed);
@@ -154,12 +140,12 @@ template <std::size_t Dim, std::size_t Size> struct Space {
     if (num_pairs < 1.0f)
       num_pairs = 1.0f;
 
-    // Distribute pairs evenly across the available space on the Y-axis
+    // distribute pairs evenly across the available space on the Y-axis
     float y_spacing = range / (num_pairs + 1.0f);
 
-    //  The distance inside the pair MUST be smaller than the distance between
-    //  pairs!
-    // Otherwise, a point from Pair 1 would be closer to Pair 2 than to its own
+    // the distance inside the pair must be smaller than the distance between
+    // pairs!
+    // otherwise, a point from pair 1 would be closer to pair 2 than to its own
     // partner, breaking the logic.
     float current_pair_dist = y_spacing * 0.9f;
     float distance_decrement = current_pair_dist / (num_pairs * 2.0f);
@@ -195,8 +181,7 @@ template <std::size_t Dim, std::size_t Size> struct Space {
     return space;
   }
 
-  /// Loads points from pre-existing dataset file, or generates and saves them
-  /// if not found.
+  // loads or creates the point from dataset
   [[nodiscard]] static Space<Dim, Size>
   get_or_create(const std::string &type = "uniform",
                 const std::string &dir = "datasets", uint64_t seed = 42) {
@@ -287,13 +272,13 @@ private:
     if (points.size() <= 2)
       return;
 
-    // Sort points along primary axis to establish initial order
+    // sort points along primary axis
     std::sort(points.begin(), points.end(),
               [](const Point<Dim> &a, const Point<Dim> &b) {
                 return a.coordinates[0] < b.coordinates[0];
               });
 
-    // Construct adversarial sequence by interleaved/inward distance progression
+    // construct adversarial sequence
     std::vector<Point<Dim>> adversarial_seq;
     adversarial_seq.reserve(points.size());
 
