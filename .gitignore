@@ -6,3 +6,4 @@ experiment_results.csv
 *.png
 .venv/
 *.zip
+datasets/
