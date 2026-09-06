@@ -111,7 +111,12 @@ template <std::size_t Dim>
 template <std::size_t Dim>
 [[nodiscard]] float
 find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
-                         bool verbose = false) {
+                         bool verbose = false,
+                         std::size_t *out_rebuilds = nullptr) {
+  if (out_rebuilds) {
+    *out_rebuilds = 0;
+  }
+
   const std::size_t size = points.size();
   if (size < 2) {
     return std::numeric_limits<float>::infinity();
@@ -142,6 +147,9 @@ find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
     // if a closer pair is found, update delta and rebuild grid with points seen
     // so far
     if (min_dist < delta) {
+      if (out_rebuilds) {
+        (*out_rebuilds)++;
+      }
       if (verbose) {
         std::cout << "[GridAlgorithm] New min distance: " << min_dist
                   << " -> Rebuilding grid..." << std::endl;
@@ -163,9 +171,10 @@ find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
 
 // overload for Space<Dim, Size> container.
 template <std::size_t Dim, std::size_t Size>
-[[nodiscard]] float find_min_dist_grid_based(const Space<Dim, Size> &space,
-                                             bool verbose = false) {
-  return find_min_dist_grid_based<Dim>(space.points, verbose);
+[[nodiscard]] float
+find_min_dist_grid_based(const Space<Dim, Size> &space, bool verbose = false,
+                         std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based<Dim>(space.points, verbose, out_rebuilds);
 }
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
@@ -173,8 +182,8 @@ using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 template <std::size_t Dim>
 [[nodiscard]] float
 find_min_dist_grid_based_randomized(std::vector<Point<Dim>> points,
-                                    TimePoint *out_start,
-                                    bool verbose = false) {
+                                    TimePoint *out_start, bool verbose = false,
+                                    std::size_t *out_rebuilds = nullptr) {
   // capture the time after deep copy
   if (out_start) {
     *out_start = std::chrono::high_resolution_clock::now();
@@ -183,29 +192,34 @@ find_min_dist_grid_based_randomized(std::vector<Point<Dim>> points,
   thread_local std::random_device rd;
   thread_local std::mt19937 g(rd());
   std::shuffle(points.begin(), points.end(), g);
-  return find_min_dist_grid_based<Dim>(points, verbose);
+  return find_min_dist_grid_based<Dim>(points, verbose, out_rebuilds);
 }
 
 template <std::size_t Dim>
 [[nodiscard]] float
 find_min_dist_grid_based_randomized(std::vector<Point<Dim>> points,
-                                    bool verbose = false) {
-  return find_min_dist_grid_based_randomized<Dim>(points, nullptr, verbose);
-}
-
-template <std::size_t Dim, std::size_t Size>
-[[nodiscard]] float find_min_dist_grid_based_randomized(
-    const Space<Dim, Size> &space, TimePoint *out_start, bool verbose = false) {
-  return find_min_dist_grid_based_randomized<Dim>(space.points, out_start,
-                                                  verbose);
+                                    bool verbose = false,
+                                    std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based_randomized<Dim>(points, nullptr, verbose,
+                                                  out_rebuilds);
 }
 
 template <std::size_t Dim, std::size_t Size>
 [[nodiscard]] float
 find_min_dist_grid_based_randomized(const Space<Dim, Size> &space,
-                                    bool verbose = false) {
+                                    TimePoint *out_start, bool verbose = false,
+                                    std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based_randomized<Dim>(space.points, out_start,
+                                                  verbose, out_rebuilds);
+}
+
+template <std::size_t Dim, std::size_t Size>
+[[nodiscard]] float
+find_min_dist_grid_based_randomized(const Space<Dim, Size> &space,
+                                    bool verbose = false,
+                                    std::size_t *out_rebuilds = nullptr) {
   return find_min_dist_grid_based_randomized<Dim>(space.points, nullptr,
-                                                  verbose);
+                                                  verbose, out_rebuilds);
 }
 
 template <std::size_t Dim>
