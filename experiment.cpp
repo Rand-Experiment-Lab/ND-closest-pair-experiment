@@ -172,6 +172,11 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
     chrono::duration<double, milli> ms = end - start;
     execution_times.push_back(ms.count());
     rebuild_counts.push_back(rebuilds);
+
+    if (k > 1 && (ms.count() > 1000.0 || NumPoints >= 40000)) {
+      std::cout << "    [Run " << i + 1 << "/" << k << "] "
+                << ms.count() << " ms (" << rebuilds << " rebuilds)\n" << std::flush;
+    }
   }
 
   Stats time_st = compute_statistics(execution_times);
@@ -230,12 +235,15 @@ void run_adversarial_space_test(const string &test_name) {
           "==========\n";
 
   auto space = Space<Dim, NumPoints>::get_or_create("adversarial");
-  int iterations = 10;
+  // For large adversarial datasets (>= 40,000 points), scale down deterministic runs to 2 iterations
+  // to prevent excessive runtimes (~8-16 min instead of ~83 min), while keeping randomized at 10.
+  int det_iterations = (NumPoints >= 40000) ? 2 : 10;
+  int rand_iterations = 10;
 
   cout << "--- 1. Adversarial Generation Order ---\n";
-  run_algorithm_multipleTimes(space, iterations, false, "Deterministic Grid",
+  run_algorithm_multipleTimes(space, det_iterations, false, "Deterministic Grid",
                               "Adversarial", "Ladder_of_Pairs");
-  run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ",
+  run_algorithm_multipleTimes(space, rand_iterations, true, "Randomized Grid   ",
                               "Adversarial", "Ladder_of_Pairs");
 }
 
