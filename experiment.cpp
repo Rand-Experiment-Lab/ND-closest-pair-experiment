@@ -34,8 +34,7 @@ struct Stats {
 void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
                 const std::string &input_order, std::string algorithm,
                 int iterations, float min_dist, const Stats &time_st,
-                const std::vector<double> &raw_times,
-                const Stats &rebuild_st,
+                const std::vector<double> &raw_times, const Stats &rebuild_st,
                 const std::vector<size_t> &raw_rebuilds) {
   std::string filename = "experiment_results.csv";
   std::ifstream check_file(filename);
@@ -59,9 +58,12 @@ void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
     std::string line;
     bool is_first = true;
     while (std::getline(in, line)) {
-      if (line.empty()) continue;
+      if (line.empty())
+        continue;
       if (is_first) {
-        lines.push_back(line + ",Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds");
+        lines.push_back(
+            line +
+            ",Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds");
         is_first = false;
       } else {
         lines.push_back(line + ",\"\",\"\",\"\",\"\"");
@@ -80,7 +82,8 @@ void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
   if (!file_exists) {
     file << "Timestamp,Space_Type,Dimensions,Num_Points,Input_Order,Algorithm,"
             "Iterations,Min_Distance,Mean_Time_ms,Median_Time_ms,StdDev_Time_"
-            "ms,Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds\n";
+            "ms,Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_"
+            "Rebuilds\n";
   }
 
   // Trim trailing spaces from algorithm name
@@ -111,15 +114,15 @@ void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
        << num_points << "," << input_order << "," << algorithm << ","
        << iterations << "," << std::fixed << std::setprecision(5) << min_dist
        << "," << std::fixed << std::setprecision(5) << time_st.mean << ","
-       << std::fixed << std::setprecision(5) << time_st.median << "," << std::fixed
-       << std::setprecision(5) << time_st.std_dev << "," << raw_ss.str() << ","
-       << std::fixed << std::setprecision(5) << rebuild_st.mean << ","
-       << std::fixed << std::setprecision(5) << rebuild_st.median << "," << std::fixed
-       << std::setprecision(5) << rebuild_st.std_dev << "," << rebuilds_ss.str() << "\n";
+       << std::fixed << std::setprecision(5) << time_st.median << ","
+       << std::fixed << std::setprecision(5) << time_st.std_dev << ","
+       << raw_ss.str() << "," << std::fixed << std::setprecision(5)
+       << rebuild_st.mean << "," << std::fixed << std::setprecision(5)
+       << rebuild_st.median << "," << std::fixed << std::setprecision(5)
+       << rebuild_st.std_dev << "," << rebuilds_ss.str() << "\n";
 }
 
-template <typename T>
-Stats compute_statistics(const std::vector<T> &values) {
+template <typename T> Stats compute_statistics(const std::vector<T> &values) {
   Stats st = {0, 0, 0};
   if (values.empty())
     return st;
@@ -162,7 +165,8 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
     auto start = chrono::high_resolution_clock::now();
     if (isRand) {
       TimePoint inner_start;
-      min_val = find_min_dist_grid_based_randomized(s, &inner_start, false, &rebuilds);
+      min_val = find_min_dist_grid_based_randomized(s, &inner_start, false,
+                                                    &rebuilds);
       start = inner_start; // Override the start time so we don't include the
                            // deep copy overhead!
     } else {
@@ -174,8 +178,9 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
     rebuild_counts.push_back(rebuilds);
 
     if (k > 1 && (ms.count() > 1000.0 || NumPoints >= 40000)) {
-      std::cout << "    [Run " << i + 1 << "/" << k << "] "
-                << ms.count() << " ms (" << rebuilds << " rebuilds)\n" << std::flush;
+      std::cout << "    [Run " << i + 1 << "/" << k << "] " << ms.count()
+                << " ms (" << rebuilds << " rebuilds)\n"
+                << std::flush;
     }
   }
 
@@ -235,75 +240,83 @@ void run_adversarial_space_test(const string &test_name) {
           "==========\n";
 
   auto space = Space<Dim, NumPoints>::get_or_create("adversarial");
-  // For large adversarial datasets (>= 40,000 points), scale down deterministic runs to 2 iterations
-  // to prevent excessive runtimes (~8-16 min instead of ~83 min), while keeping randomized at 10.
-  int det_iterations = (NumPoints >= 40000) ? 2 : 10;
+  // For adversarial datasets, use 2 deterministic iterations (near-zero
+  // variance) to prevent excessive runtime, while running 10 randomized
+  // iterations.
+  int det_iterations = 2;
   int rand_iterations = 10;
 
   cout << "--- 1. Adversarial Generation Order ---\n";
-  run_algorithm_multipleTimes(space, det_iterations, false, "Deterministic Grid",
-                              "Adversarial", "Ladder_of_Pairs");
-  run_algorithm_multipleTimes(space, rand_iterations, true, "Randomized Grid   ",
-                              "Adversarial", "Ladder_of_Pairs");
+  run_algorithm_multipleTimes(space, det_iterations, false,
+                              "Deterministic Grid", "Adversarial",
+                              "Ladder_of_Pairs");
+  run_algorithm_multipleTimes(space, rand_iterations, true,
+                              "Randomized Grid   ", "Adversarial",
+                              "Ladder_of_Pairs");
+}
+
+template <size_t Dim> void run_all_normal_tests_for_dim() {
+  cout << "\n------------------ " << Dim
+       << "D Normal Space Tests (100k -> 1M) ------------------\n";
+  run_normal_space_test<Dim, 100000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 200000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 300000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 400000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 500000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 600000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 700000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 800000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 900000>(to_string(Dim) + "D Set");
+  run_normal_space_test<Dim, 1000000>(to_string(Dim) + "D Set");
+}
+
+template <size_t Dim> void run_all_adversarial_tests_for_dim() {
+  cout << "\n------------------ " << Dim
+       << "D Adversarial Space Tests (10k -> 50k) ------------------\n";
+  run_adversarial_space_test<Dim, 10000>(to_string(Dim) + "D Set");
+  run_adversarial_space_test<Dim, 20000>(to_string(Dim) + "D Set");
+  run_adversarial_space_test<Dim, 30000>(to_string(Dim) + "D Set");
+  run_adversarial_space_test<Dim, 40000>(to_string(Dim) + "D Set");
+  run_adversarial_space_test<Dim, 50000>(to_string(Dim) + "D Set");
 }
 
 int main() {
   cout << fixed << setprecision(5);
-  cout << "\nStarting Exhaustive Closest Pair Performance Experiments...\n";
-  cout << "This will run 2D, 3D, 5D, 7D, and 9D across Small, Medium, and "
-          "Large datasets.\n";
+  cout << "\nStarting Restructured Closest Pair Performance Experiments...\n";
+  cout << "Phase 1: Normal Space (Original & Sorted) with Large Input Sizes "
+          "(100,000 -> 1,000,000)\n";
+  cout << "Phase 2: Adversarial Space (Ladder of Pairs) with Controlled Sizes "
+          "(10,000 -> 50,000)\n";
   cout << "All results are continuously logged to experiment_results.csv.\n\n";
 
-  // ================== 2D Tests ==================
-  run_normal_space_test<2, 2000>("2D Small Set");
-  run_adversarial_space_test<2, 2000>("2D Small Set");
+  // =========================================================================
+  // PHASE 1: NORMAL SPACE EXPERIMENTS (100k -> 1M)
+  // =========================================================================
+  cout << "===================================================================="
+          "==========\n";
+  cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED)\n";
+  cout << "===================================================================="
+          "==========\n";
+  run_all_normal_tests_for_dim<2>();
+  run_all_normal_tests_for_dim<3>();
+  run_all_normal_tests_for_dim<5>();
+  run_all_normal_tests_for_dim<7>();
+  run_all_normal_tests_for_dim<9>();
 
-  run_normal_space_test<2, 10000>("2D Medium Set");
-  run_adversarial_space_test<2, 10000>("2D Medium Set");
+  // =========================================================================
+  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (10k -> 50k)
+  // =========================================================================
+  cout << "\n=================================================================="
+          "============\n";
+  cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS)\n";
+  cout << "===================================================================="
+          "==========\n";
+  run_all_adversarial_tests_for_dim<2>();
+  run_all_adversarial_tests_for_dim<3>();
+  run_all_adversarial_tests_for_dim<5>();
+  run_all_adversarial_tests_for_dim<7>();
+  run_all_adversarial_tests_for_dim<9>();
 
-  run_normal_space_test<2, 100000>("2D Large Set");
-  run_adversarial_space_test<2, 100000>("2D Large Set");
-
-  // ================== 3D Tests ==================
-  run_normal_space_test<3, 2000>("3D Small Set");
-  run_adversarial_space_test<3, 2000>("3D Small Set");
-
-  run_normal_space_test<3, 10000>("3D Medium Set");
-  run_adversarial_space_test<3, 10000>("3D Medium Set");
-
-  run_normal_space_test<3, 100000>("3D Large Set");
-  run_adversarial_space_test<3, 100000>("3D Large Set");
-
-  // ================== 5D Tests ==================
-  run_normal_space_test<5, 2000>("5D Small Set");
-  run_adversarial_space_test<5, 2000>("5D Small Set");
-
-  run_normal_space_test<5, 10000>("5D Medium Set");
-  run_adversarial_space_test<5, 10000>("5D Medium Set");
-
-  run_normal_space_test<5, 80000>("5D Large Set");
-  run_adversarial_space_test<5, 80000>("5D Large Set");
-
-  // ================== 7D Tests ==================
-  run_normal_space_test<7, 2000>("7D Small Set");
-  run_adversarial_space_test<7, 2000>("7D Small Set");
-
-  run_normal_space_test<7, 10000>("7D Medium Set");
-  run_adversarial_space_test<7, 10000>("7D Medium Set");
-
-  run_normal_space_test<7, 60000>("7D Large Set");
-  run_adversarial_space_test<7, 60000>("7D Large Set");
-
-  // ================== 9D Tests (Extreme Grid Overhead) ==================
-  run_normal_space_test<9, 2000>("9D Small Set");
-  run_adversarial_space_test<9, 2000>("9D Small Set");
-
-  run_normal_space_test<9, 10000>("9D Medium Set");
-  run_adversarial_space_test<9, 10000>("9D Medium Set");
-
-  run_normal_space_test<9, 40000>("9D Large Set");
-  run_adversarial_space_test<9, 40000>("9D Large Set");
-
-  cout << "All exhaustive experiments completed successfully!\n";
+  cout << "\nAll exhaustive experiments completed successfully!\n";
   return 0;
 }
