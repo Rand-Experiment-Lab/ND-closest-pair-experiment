@@ -280,43 +280,83 @@ template <size_t Dim> void run_all_adversarial_tests_for_dim() {
   run_adversarial_space_test<Dim, 50000>(to_string(Dim) + "D Set");
 }
 
-int main() {
+void print_usage(const char* prog_name) {
+  cout << "Usage:\n"
+       << "  " << prog_name << "               # Run all experiments (Normal + Adversarial)\n"
+       << "  " << prog_name << " normal        # Run only Normal space experiments (Original & Sorted)\n"
+       << "  " << prog_name << " adversarial   # Run only Adversarial space experiments (Ladder of Pairs)\n";
+}
+
+int main(int argc, char* argv[]) {
+  bool run_normal = true;
+  bool run_adversarial = true;
+
+  if (argc > 1) {
+    string mode = argv[1];
+    transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+
+    if (mode == "normal") {
+      run_normal = true;
+      run_adversarial = false;
+    } else if (mode == "adversarial") {
+      run_normal = false;
+      run_adversarial = true;
+    } else if (mode == "all" || mode == "both") {
+      run_normal = true;
+      run_adversarial = true;
+    } else if (mode == "--help" || mode == "-h") {
+      print_usage(argv[0]);
+      return 0;
+    } else {
+      cerr << "Unknown mode: " << argv[1] << "\n";
+      print_usage(argv[0]);
+      return 1;
+    }
+  }
+
   cout << fixed << setprecision(5);
   cout << "\nStarting Restructured Closest Pair Performance Experiments...\n";
-  cout << "Phase 1: Normal Space (Original & Sorted) with Large Input Sizes "
-          "(100,000 -> 1,000,000)\n";
-  cout << "Phase 2: Adversarial Space (Ladder of Pairs) with Controlled Sizes "
-          "(10,000 -> 50,000)\n";
+  if (run_normal && run_adversarial) {
+    cout << "Mode: ALL EXPERIMENTS (Normal + Adversarial)\n";
+  } else if (run_normal) {
+    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 100k -> 1M)\n";
+  } else {
+    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 10k -> 50k)\n";
+  }
   cout << "All results are continuously logged to experiment_results.csv.\n\n";
 
   // =========================================================================
   // PHASE 1: NORMAL SPACE EXPERIMENTS (100k -> 1M)
   // =========================================================================
-  cout << "===================================================================="
-          "==========\n";
-  cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED)\n";
-  cout << "===================================================================="
-          "==========\n";
-  run_all_normal_tests_for_dim<2>();
-  run_all_normal_tests_for_dim<3>();
-  run_all_normal_tests_for_dim<5>();
-  run_all_normal_tests_for_dim<7>();
-  run_all_normal_tests_for_dim<9>();
+  if (run_normal) {
+    cout << "===================================================================="
+            "==========\n";
+    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED)\n";
+    cout << "===================================================================="
+            "==========\n";
+    run_all_normal_tests_for_dim<2>();
+    run_all_normal_tests_for_dim<3>();
+    run_all_normal_tests_for_dim<5>();
+    run_all_normal_tests_for_dim<7>();
+    run_all_normal_tests_for_dim<9>();
+  }
 
   // =========================================================================
   // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (10k -> 50k)
   // =========================================================================
-  cout << "\n=================================================================="
-          "============\n";
-  cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS)\n";
-  cout << "===================================================================="
-          "==========\n";
-  run_all_adversarial_tests_for_dim<2>();
-  run_all_adversarial_tests_for_dim<3>();
-  run_all_adversarial_tests_for_dim<5>();
-  run_all_adversarial_tests_for_dim<7>();
-  run_all_adversarial_tests_for_dim<9>();
+  if (run_adversarial) {
+    cout << "\n=================================================================="
+            "============\n";
+    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS)\n";
+    cout << "===================================================================="
+            "==========\n";
+    run_all_adversarial_tests_for_dim<2>();
+    run_all_adversarial_tests_for_dim<3>();
+    run_all_adversarial_tests_for_dim<5>();
+    run_all_adversarial_tests_for_dim<7>();
+    run_all_adversarial_tests_for_dim<9>();
+  }
 
-  cout << "\nAll exhaustive experiments completed successfully!\n";
+  cout << "\nAll selected experiments completed successfully!\n";
   return 0;
 }

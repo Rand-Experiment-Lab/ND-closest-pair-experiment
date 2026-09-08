@@ -221,19 +221,62 @@ void run_adversarial_space_test(const string &test_name, int iterations = 3) {
   run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ", "Adversarial", "Ladder_of_Pairs");
 }
 
-int main() {
+void print_usage(const char* prog_name) {
+  cout << "Usage:\n"
+       << "  " << prog_name << "               # Run all quick experiments (Normal + Adversarial)\n"
+       << "  " << prog_name << " normal        # Run only Normal space quick experiments\n"
+       << "  " << prog_name << " adversarial   # Run only Adversarial space quick experiments\n";
+}
+
+int main(int argc, char* argv[]) {
+  bool run_normal = true;
+  bool run_adversarial = true;
+
+  if (argc > 1) {
+    string mode = argv[1];
+    transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+
+    if (mode == "normal") {
+      run_normal = true;
+      run_adversarial = false;
+    } else if (mode == "adversarial") {
+      run_normal = false;
+      run_adversarial = true;
+    } else if (mode == "all" || mode == "both") {
+      run_normal = true;
+      run_adversarial = true;
+    } else if (mode == "--help" || mode == "-h") {
+      print_usage(argv[0]);
+      return 0;
+    } else {
+      cerr << "Unknown mode: " << argv[1] << "\n";
+      print_usage(argv[0]);
+      return 1;
+    }
+  }
+
   cout << fixed << setprecision(5);
   cout << "\n=== Running Quick Closest Pair Experiment (Verification) ===\n";
+  if (run_normal && run_adversarial) {
+    cout << "Mode: ALL QUICK EXPERIMENTS (Normal + Adversarial)\n";
+  } else if (run_normal) {
+    cout << "Mode: NORMAL SPACE ONLY\n";
+  } else {
+    cout << "Mode: ADVERSARIAL SPACE ONLY\n";
+  }
   cout << "Testing dataset creation / loading and algorithm execution...\n\n";
 
   int iters = 3;
 
-  // 2D & 3D Small sets (2000 points) for quick execution
-  run_normal_space_test<2, 2000>("2D Small Set", iters);
-  run_adversarial_space_test<2, 2000>("2D Small Set", iters);
+  if (run_normal) {
+    run_normal_space_test<2, 2000>("2D Small Set", iters);
+    run_normal_space_test<3, 2000>("3D Small Set", iters);
+  }
 
-  run_normal_space_test<3, 2000>("3D Small Set", iters);
-  run_adversarial_space_test<3, 2000>("3D Small Set", iters);
+  if (run_adversarial) {
+    run_adversarial_space_test<2, 2000>("2D Small Set", iters);
+    run_adversarial_space_test<3, 2000>("3D Small Set", iters);
+  }
 
   cout << "\nQuick experiment completed successfully!\n";
   return 0;

@@ -40,13 +40,17 @@ cmake --build build -j$(nproc)
 # Verify correctness (Grid vs Brute Force baseline)
 ./build/verify
 
-# Run quick benchmark
+# Run quick benchmark verification (supports: 'normal', 'adversarial', or no argument for all)
 ./build/experiment_quick
+./build/experiment_quick normal
+./build/experiment_quick adversarial
 
-# Run full performance benchmark suite
-./build/experiment
+# Run performance benchmark suite
+./build/experiment              # Runs both Normal (100k-1M) and Adversarial (10k-50k)
+./build/experiment normal       # Runs only Normal space experiments (Original & Sorted)
+./build/experiment adversarial  # Runs only Adversarial space experiments (Ladder of Pairs)
 
-# (Optional) Generate binary dataset caches
+# (Optional) Pre-generate binary dataset caches matching the experiment suites
 ./build/data_set_generator
 
 # (Optional) Generate benchmark plots

@@ -189,21 +189,19 @@ int main(int argc, char *argv[]) {
   cout << "=== Generating Benchmark Datasets for Closest Pair Experiments in ./"
        << out_dir << " ===\n\n";
 
-  const vector<pair<size_t, vector<size_t>>> benchmarks = {
-      {2, {2000, 10000, 100000}},
-      {3, {2000, 10000, 100000}},
-      {5, {2000, 10000, 80000}},
-      {7, {2000, 10000, 60000}},
-      {9, {2000, 10000, 40000}}};
-
-  const vector<string> types = {"uniform", "adversarial"};
+  const vector<size_t> dims = {2, 3, 5, 7, 9};
+  const vector<size_t> uniform_sizes = {100000, 200000, 300000, 400000, 500000,
+                                       600000, 700000, 800000, 900000, 1000000};
+  const vector<size_t> adversarial_sizes = {10000, 20000, 30000, 40000, 50000};
 
   uint64_t seed = 42;
-  for (const auto &[dim, sizes] : benchmarks) {
-    for (const auto &type : types) {
-      for (size_t n : sizes) {
-        dispatch_generation(dim, type, n, out_dir, seed++);
-      }
+  for (size_t dim : dims) {
+    cout << "\n--- Dimension " << dim << "D ---\n";
+    for (size_t n : uniform_sizes) {
+      dispatch_generation(dim, "uniform", n, out_dir, seed++);
+    }
+    for (size_t n : adversarial_sizes) {
+      dispatch_generation(dim, "adversarial", n, out_dir, seed++);
     }
   }
 
