@@ -101,17 +101,28 @@ bool load_points_from_bin(const std::string &filepath,
 }
 
 // container representing an n-dimensional space.
-template <std::size_t Dim, std::size_t Size> struct Space {
+template <std::size_t Dim, std::size_t Size = 0> struct Space {
   static constexpr std::size_t dimension = Dim;
   static constexpr std::size_t points_size = Size;
 
   std::vector<Point<Dim>> points;
 
   Space() : points(Size) {}
+  explicit Space(std::size_t count) : points(count) {}
 
   // initializes points with uniform random coordinates.
   explicit Space(float min_val, float max_val, uint64_t seed = 42)
       : points(Size) {
+    init_uniform(Size, min_val, max_val, seed);
+  }
+
+  explicit Space(std::size_t count, float min_val, float max_val, uint64_t seed = 42)
+      : points(count) {
+    init_uniform(count, min_val, max_val, seed);
+  }
+
+  void init_uniform(std::size_t count, float min_val = 0.0f, float max_val = 1000.0f, uint64_t seed = 42) {
+    points.resize(count);
     std::mt19937_64 gen(seed);
     std::uniform_real_distribution<float> dist(min_val, max_val);
 
@@ -123,20 +134,28 @@ template <std::size_t Dim, std::size_t Size> struct Space {
   }
 
   [[nodiscard]] static Space<Dim, Size>
-  create_uniform_space(float min_val = 0.0f, float max_val = 1000.0f,
+  create_uniform_space(std::size_t count, float min_val = 0.0f, float max_val = 1000.0f,
                        uint64_t seed = 42) {
-    return Space<Dim, Size>(min_val, max_val, seed);
+    Space<Dim, Size> space(count);
+    space.init_uniform(count, min_val, max_val, seed);
+    return space;
   }
 
   [[nodiscard]] static Space<Dim, Size>
-  create_adversarial_space(float min_val = 0.0f, float max_val = 1000.0f) {
-    Space<Dim, Size> space;
-    if (Size == 0)
+  create_uniform_space(float min_val = 0.0f, float max_val = 1000.0f,
+                       uint64_t seed = 42) {
+    return create_uniform_space(Size, min_val, max_val, seed);
+  }
+
+  [[nodiscard]] static Space<Dim, Size>
+  create_adversarial_space(std::size_t count, float min_val = 0.0f, float max_val = 1000.0f) {
+    Space<Dim, Size> space(count);
+    if (count == 0)
       return space;
-    space.points.resize(Size);
+    space.points.resize(count);
 
     float range = max_val - min_val;
-    float num_pairs = static_cast<float>(Size) / 2.0f;
+    float num_pairs = static_cast<float>(count) / 2.0f;
     if (num_pairs < 1.0f)
       num_pairs = 1.0f;
 
@@ -150,7 +169,7 @@ template <std::size_t Dim, std::size_t Size> struct Space {
     float current_pair_dist = y_spacing * 0.9f;
     float distance_decrement = current_pair_dist / (num_pairs * 2.0f);
     float current_y = min_val + y_spacing;
-    for (std::size_t i = 0; i < Size; i += 2) {
+    for (std::size_t i = 0; i < count; i += 2) {
       Point<Dim> p1, p2;
 
       for (std::size_t d = 0; d < Dim; ++d) {
@@ -171,7 +190,7 @@ template <std::size_t Dim, std::size_t Size> struct Space {
       }
 
       space.points[i] = p1;
-      if (i + 1 < Size) {
+      if (i + 1 < count) {
         space.points[i + 1] = p2;
       }
       current_pair_dist -= distance_decrement;
@@ -181,18 +200,23 @@ template <std::size_t Dim, std::size_t Size> struct Space {
     return space;
   }
 
-  // loads or creates the point from dataset
   [[nodiscard]] static Space<Dim, Size>
-  get_or_create(const std::string &type = "uniform",
+  create_adversarial_space(float min_val = 0.0f, float max_val = 1000.0f) {
+    return create_adversarial_space(Size, min_val, max_val);
+  }
+
+  // loads or creates the point from dataset with runtime size count
+  [[nodiscard]] static Space<Dim, Size>
+  get_or_create(const std::string &type, std::size_t count,
                 const std::string &dir = "datasets", uint64_t seed = 42) {
     std::filesystem::create_directories(dir);
     std::string filename = dir + "/" + type + "_d" + std::to_string(Dim) +
-                           "_n" + std::to_string(Size) + ".bin";
+                           "_n" + std::to_string(count) + ".bin";
 
-    Space<Dim, Size> space;
+    Space<Dim, Size> space(count);
     if (std::filesystem::exists(filename)) {
       if (load_points_from_bin<Dim>(filename, space.points) &&
-          space.points.size() == Size) {
+          space.points.size() == count) {
         std::cout << "[Dataset] Loaded existing cached dataset: " << filename
                   << "\n";
         return space;
@@ -204,13 +228,20 @@ template <std::size_t Dim, std::size_t Size> struct Space {
     std::cout << "[Dataset] Generating and caching dataset: " << filename
               << "\n";
     if (type == "adversarial") {
-      space = create_adversarial_space();
+      space = create_adversarial_space(count);
     } else {
-      space = create_uniform_space(0.0f, 1000.0f, seed);
+      space = create_uniform_space(count, 0.0f, 1000.0f, seed);
     }
 
     save_points_to_bin<Dim>(filename, space.points);
     return space;
+  }
+
+  // loads or creates the point from dataset using template Size
+  [[nodiscard]] static Space<Dim, Size>
+  get_or_create(const std::string &type = "uniform",
+                const std::string &dir = "datasets", uint64_t seed = 42) {
+    return get_or_create(type, Size, dir, seed);
   }
 
   /// @param strategy

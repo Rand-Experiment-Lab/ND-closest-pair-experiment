@@ -150,8 +150,8 @@ template <typename T> Stats compute_statistics(const std::vector<T> &values) {
   return st;
 }
 
-template <size_t Dim, size_t NumPoints>
-float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
+template <size_t Dim>
+float run_algorithm_multipleTimes(Space<Dim> &s, int k, bool isRand,
                                   const string &label, const string &space_type,
                                   const string &input_order) {
   std::vector<double> execution_times;
@@ -159,6 +159,7 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
   std::vector<size_t> rebuild_counts;
   rebuild_counts.reserve(k);
   float min_val = 0.0f;
+  size_t num_points = s.points.size();
 
   for (int i = 0; i < k; i++) {
     size_t rebuilds = 0;
@@ -177,7 +178,7 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
     execution_times.push_back(ms.count());
     rebuild_counts.push_back(rebuilds);
 
-    if (k > 1 && (ms.count() > 1000.0 || NumPoints >= 40000)) {
+    if (k > 1 && (ms.count() > 1000.0 || num_points >= 40000)) {
       std::cout << "    [Run " << i + 1 << "/" << k << "] " << ms.count()
                 << " ms (" << rebuilds << " rebuilds)\n"
                 << std::flush;
@@ -198,22 +199,22 @@ float run_algorithm_multipleTimes(Space<Dim, NumPoints> &s, int k, bool isRand,
   std::cout << "      Std Dev  : " << rebuild_st.std_dev << "\n";
   std::cout << "\n";
 
-  log_to_csv(space_type, Dim, NumPoints, input_order, label, k, min_val,
+  log_to_csv(space_type, Dim, num_points, input_order, label, k, min_val,
              time_st, execution_times, rebuild_st, rebuild_counts);
 
   return min_val;
 }
 
-template <size_t Dim, size_t NumPoints>
-void run_normal_space_test(const string &test_name) {
+template <size_t Dim>
+void run_normal_space_test(size_t num_points, const string &test_name) {
   cout << "===================================================================="
           "==========\n";
-  cout << "[NORMAL SPACE] " << test_name << " [" << NumPoints << " points in "
+  cout << "[NORMAL SPACE] " << test_name << " [" << num_points << " points in "
        << Dim << "D]\n";
   cout << "===================================================================="
           "==========\n";
 
-  auto space = Space<Dim, NumPoints>::get_or_create("uniform");
+  auto space = Space<Dim>::get_or_create("uniform", num_points);
   int iterations = 10;
 
   cout << "--- 1. Original Generation Order ---\n";
@@ -230,16 +231,16 @@ void run_normal_space_test(const string &test_name) {
                               "Normal", "Sorted_X_Axis");
 }
 
-template <size_t Dim, size_t NumPoints>
-void run_adversarial_space_test(const string &test_name) {
+template <size_t Dim>
+void run_adversarial_space_test(size_t num_points, const string &test_name) {
   cout << "===================================================================="
           "==========\n";
-  cout << "[ADVERSARIAL SPACE] " << test_name << " [" << NumPoints
+  cout << "[ADVERSARIAL SPACE] " << test_name << " [" << num_points
        << " points in " << Dim << "D]\n";
   cout << "===================================================================="
           "==========\n";
 
-  auto space = Space<Dim, NumPoints>::get_or_create("adversarial");
+  auto space = Space<Dim>::get_or_create("adversarial", num_points);
   // For adversarial datasets, use 2 deterministic iterations (near-zero
   // variance) to prevent excessive runtime, while running 10 randomized
   // iterations.
@@ -257,27 +258,18 @@ void run_adversarial_space_test(const string &test_name) {
 
 template <size_t Dim> void run_all_normal_tests_for_dim() {
   cout << "\n------------------ " << Dim
-       << "D Normal Space Tests (100k -> 1M) ------------------\n";
-  run_normal_space_test<Dim, 100000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 200000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 300000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 400000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 500000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 600000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 700000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 800000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 900000>(to_string(Dim) + "D Set");
-  run_normal_space_test<Dim, 1000000>(to_string(Dim) + "D Set");
+       << "D Normal Space Tests (500k -> 1.5M) ------------------\n";
+  for (size_t n = 500'000; n <= 1'500'000; n += 100'000) {
+    run_normal_space_test<Dim>(n, to_string(Dim) + "D Set");
+  }
 }
 
 template <size_t Dim> void run_all_adversarial_tests_for_dim() {
   cout << "\n------------------ " << Dim
-       << "D Adversarial Space Tests (10k -> 50k) ------------------\n";
-  run_adversarial_space_test<Dim, 10000>(to_string(Dim) + "D Set");
-  run_adversarial_space_test<Dim, 20000>(to_string(Dim) + "D Set");
-  run_adversarial_space_test<Dim, 30000>(to_string(Dim) + "D Set");
-  run_adversarial_space_test<Dim, 40000>(to_string(Dim) + "D Set");
-  run_adversarial_space_test<Dim, 50000>(to_string(Dim) + "D Set");
+       << "D Adversarial Space Tests (20k -> 70k) ------------------\n";
+  for (size_t n = 20'000; n <= 70'000; n += 10'000) {
+    run_adversarial_space_test<Dim>(n, to_string(Dim) + "D Set");
+  }
 }
 
 void print_usage(const char* prog_name) {
@@ -319,19 +311,19 @@ int main(int argc, char* argv[]) {
   if (run_normal && run_adversarial) {
     cout << "Mode: ALL EXPERIMENTS (Normal + Adversarial)\n";
   } else if (run_normal) {
-    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 100k -> 1M)\n";
+    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 500k -> 1.5M)\n";
   } else {
-    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 10k -> 50k)\n";
+    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 20k -> 70k)\n";
   }
   cout << "All results are continuously logged to experiment_results.csv.\n\n";
 
   // =========================================================================
-  // PHASE 1: NORMAL SPACE EXPERIMENTS (100k -> 1M)
+  // PHASE 1: NORMAL SPACE EXPERIMENTS (500k -> 1.5M)
   // =========================================================================
   if (run_normal) {
     cout << "===================================================================="
             "==========\n";
-    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED)\n";
+    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED, 500k -> 1.5M)\n";
     cout << "===================================================================="
             "==========\n";
     run_all_normal_tests_for_dim<2>();
@@ -342,12 +334,12 @@ int main(int argc, char* argv[]) {
   }
 
   // =========================================================================
-  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (10k -> 50k)
+  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (20k -> 70k)
   // =========================================================================
   if (run_adversarial) {
     cout << "\n=================================================================="
             "============\n";
-    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS)\n";
+    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS, 20k -> 70k)\n";
     cout << "===================================================================="
             "==========\n";
     run_all_adversarial_tests_for_dim<2>();
