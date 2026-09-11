@@ -45,7 +45,7 @@ bool run_validation_test(const string& test_name) {
     float diff_grid = abs(min_brute - min_grid);
     float diff_adv = abs(min_brute - min_adv);
     float diff_rand = abs(min_brute - min_rand);
-    bool passed = (diff_grid <= EPSILON) && (diff_adv <= EPSILON) && (diff_rand <= EPSILON);
+    bool passed = (min_brute > 0.0f) && (diff_grid <= EPSILON) && (diff_adv <= EPSILON) && (diff_rand <= EPSILON);
 
     cout << fixed << setprecision(5);
     cout << "  Brute Force Min Dist     : " << min_brute << " (" << brute_ms.count() << " ms)" << endl;
@@ -73,7 +73,7 @@ bool run_duplicate_points_test() {
     vector<Point<Dim>> points(100);
     for (size_t i = 0; i < points.size(); ++i) {
         for (size_t d = 0; d < Dim; ++d) {
-            points[i].coordinates[d] = static_cast<float>(i * 10);
+            points[i].coordinates[d] = static_cast<float>((i + 1) * 10);
         }
     }
     // Force points 10 and 50 to be identical

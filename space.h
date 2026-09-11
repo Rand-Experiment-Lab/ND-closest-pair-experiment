@@ -107,7 +107,11 @@ template <std::size_t Dim, std::size_t Size = 0> struct Space {
 
   std::vector<Point<Dim>> points;
 
-  Space() : points(Size) {}
+  Space() : points(Size) {
+    if constexpr (Size > 0) {
+      init_uniform(Size, 1.0f, 1000.0f, 42);
+    }
+  }
   explicit Space(std::size_t count) : points(count) {}
 
   // initializes points with uniform random coordinates.
@@ -155,46 +159,69 @@ template <std::size_t Dim, std::size_t Size = 0> struct Space {
     space.points.resize(count);
 
     float range = max_val - min_val;
-    float num_pairs = static_cast<float>(count) / 2.0f;
-    if (num_pairs < 1.0f)
-      num_pairs = 1.0f;
-
-    // distribute pairs evenly across the available space on the Y-axis
-    float y_spacing = range / (num_pairs + 1.0f);
-
-    // the distance inside the pair must be smaller than the distance between
-    // pairs!
-    // otherwise, a point from pair 1 would be closer to pair 2 than to its own
-    // partner, breaking the logic.
-    float current_pair_dist = y_spacing * 0.9f;
-    float distance_decrement = current_pair_dist / (num_pairs * 2.0f);
-    float current_y = min_val + y_spacing;
-    for (std::size_t i = 0; i < count; i += 2) {
-      Point<Dim> p1, p2;
-
+    std::size_t num_pairs = count / 2;
+    if (num_pairs == 0) {
       for (std::size_t d = 0; d < Dim; ++d) {
-        p1.coordinates[d] = min_val;
-        p2.coordinates[d] = min_val;
+        space.points[0].coordinates[d] = min_val + range * 0.5f;
       }
+      return space;
+    }
 
-      if (Dim > 1) {
-        for (std::size_t d = 1; d < Dim; ++d) {
-          p1.coordinates[d] = current_y;
-          p2.coordinates[d] = current_y;
+    // Determine grid resolution M per dimension so M^Dim >= num_pairs
+    std::size_t M = 1;
+    while (true) {
+      std::size_t cap = 1;
+      bool overflow = false;
+      for (std::size_t d = 0; d < Dim; ++d) {
+        if (__builtin_mul_overflow(cap, M, &cap)) {
+          overflow = true;
+          break;
         }
-        p1.coordinates[0] = min_val;
-        p2.coordinates[0] = min_val + current_pair_dist;
-      } else {
-        p1.coordinates[0] = current_y;
-        p2.coordinates[0] = current_y + current_pair_dist;
+      }
+      if (overflow || cap >= num_pairs) {
+        break;
+      }
+      ++M;
+    }
+
+    float step = range / static_cast<float>(M + 1);
+    float d_max = step * 0.4f;
+    float d_min = std::max(d_max * 0.01f, 1e-4f);
+
+    for (std::size_t k = 0; k < num_pairs; ++k) {
+      Point<Dim> center;
+      std::size_t temp = k;
+      for (std::size_t d = 0; d < Dim; ++d) {
+        std::size_t coord_idx = temp % M;
+        temp /= M;
+        center.coordinates[d] = min_val + static_cast<float>(coord_idx + 1) * step;
       }
 
-      space.points[i] = p1;
-      if (i + 1 < count) {
-        space.points[i + 1] = p2;
+      float pair_dist = d_max;
+      if (num_pairs > 1) {
+        float frac = static_cast<float>(k) / static_cast<float>(num_pairs - 1);
+        pair_dist = d_max - (d_max - d_min) * frac;
       }
-      current_pair_dist -= distance_decrement;
-      current_y += y_spacing;
+
+      Point<Dim> p1 = center;
+      Point<Dim> p2 = center;
+      std::size_t offset_dim = k % Dim;
+      p1.coordinates[offset_dim] -= pair_dist * 0.5f;
+      p2.coordinates[offset_dim] += pair_dist * 0.5f;
+
+      space.points[2 * k] = p1;
+      space.points[2 * k + 1] = p2;
+    }
+
+    if (count % 2 != 0) {
+      Point<Dim> p_last;
+      std::size_t temp = num_pairs;
+      for (std::size_t d = 0; d < Dim; ++d) {
+        std::size_t coord_idx = temp % M;
+        temp /= M;
+        p_last.coordinates[d] = min_val + static_cast<float>(coord_idx + 1) * step;
+      }
+      space.points[count - 1] = p_last;
     }
 
     return space;
@@ -251,43 +278,74 @@ template <std::size_t Dim, std::size_t Size = 0> struct Space {
       axis = 0;
     }
 
-    switch (strategy) {
-    case SortStrategy::AxisAscending:
-      std::sort(std::execution::par, points.begin(), points.end(),
-                [axis](const Point<Dim> &a, const Point<Dim> &b) {
-                  return a.coordinates[axis] < b.coordinates[axis];
-                });
-      break;
+    constexpr std::size_t PAR_SORT_THRESHOLD = 32768;
 
-    case SortStrategy::AxisDescending:
-      std::sort(std::execution::par, points.begin(), points.end(),
-                [axis](const Point<Dim> &a, const Point<Dim> &b) {
-                  return a.coordinates[axis] > b.coordinates[axis];
-                });
+    auto squared_norm = [](const Point<Dim> &p) noexcept -> float {
+      float sum = 0.0f;
+      for (std::size_t d = 0; d < Dim; ++d) {
+        sum += p.coordinates[d] * p.coordinates[d];
+      }
+      return sum;
+    };
+
+    switch (strategy) {
+    case SortStrategy::AxisAscending: {
+      auto comp = [axis](const Point<Dim> &a, const Point<Dim> &b) noexcept {
+        return a.coordinates[axis] < b.coordinates[axis];
+      };
+      if (points.size() >= PAR_SORT_THRESHOLD) {
+        std::sort(std::execution::par, points.begin(), points.end(), comp);
+      } else {
+        std::sort(points.begin(), points.end(), comp);
+      }
       break;
+    }
+
+    case SortStrategy::AxisDescending: {
+      auto comp = [axis](const Point<Dim> &a, const Point<Dim> &b) noexcept {
+        return a.coordinates[axis] > b.coordinates[axis];
+      };
+      if (points.size() >= PAR_SORT_THRESHOLD) {
+        std::sort(std::execution::par, points.begin(), points.end(), comp);
+      } else {
+        std::sort(points.begin(), points.end(), comp);
+      }
+      break;
+    }
 
     case SortStrategy::RandomShuffle: {
       std::random_device rd;
-      std::mt19937 g(rd());
+      std::array<std::uint32_t, 8> seed_data{};
+      for (auto &val : seed_data) {
+        val = rd();
+      }
+      std::seed_seq seq(seed_data.begin(), seed_data.end());
+      std::mt19937 g(seq);
       std::shuffle(points.begin(), points.end(), g);
       break;
     }
 
     case SortStrategy::DistanceToOriginAscending: {
-      Point<Dim> origin{};
-      std::sort(std::execution::par, points.begin(), points.end(),
-                [&origin](const Point<Dim> &a, const Point<Dim> &b) {
-                  return a.distance_to(origin) < b.distance_to(origin);
-                });
+      auto comp = [squared_norm](const Point<Dim> &a, const Point<Dim> &b) noexcept {
+        return squared_norm(a) < squared_norm(b);
+      };
+      if (points.size() >= PAR_SORT_THRESHOLD) {
+        std::sort(std::execution::par, points.begin(), points.end(), comp);
+      } else {
+        std::sort(points.begin(), points.end(), comp);
+      }
       break;
     }
 
     case SortStrategy::DistanceToOriginDescending: {
-      Point<Dim> origin{};
-      std::sort(std::execution::par, points.begin(), points.end(),
-                [&origin](const Point<Dim> &a, const Point<Dim> &b) {
-                  return a.distance_to(origin) > b.distance_to(origin);
-                });
+      auto comp = [squared_norm](const Point<Dim> &a, const Point<Dim> &b) noexcept {
+        return squared_norm(a) > squared_norm(b);
+      };
+      if (points.size() >= PAR_SORT_THRESHOLD) {
+        std::sort(std::execution::par, points.begin(), points.end(), comp);
+      } else {
+        std::sort(points.begin(), points.end(), comp);
+      }
       break;
     }
 
@@ -303,36 +361,75 @@ private:
     if (points.size() <= 2)
       return;
 
-    // sort points along primary axis
-    std::sort(points.begin(), points.end(),
-              [](const Point<Dim> &a, const Point<Dim> &b) {
-                return a.coordinates[0] < b.coordinates[0];
-              });
+    constexpr std::size_t PAR_SORT_THRESHOLD = 32768;
 
-    // construct adversarial sequence
-    std::vector<Point<Dim>> adversarial_seq;
-    adversarial_seq.reserve(points.size());
-
-    std::size_t left = 0;
-    std::size_t right = points.size() - 1;
-
-    while (left <= right) {
-      if (left == right) {
-        adversarial_seq.push_back(points[left]);
-        break;
+    // Sort points lexicographically across all dimensions
+    auto lex_comp = [](const Point<Dim> &a, const Point<Dim> &b) noexcept {
+      for (std::size_t d = 0; d < Dim; ++d) {
+        if (a.coordinates[d] < b.coordinates[d]) return true;
+        if (a.coordinates[d] > b.coordinates[d]) return false;
       }
-      adversarial_seq.push_back(points[left++]);
-      adversarial_seq.push_back(points[right--]);
+      return false;
+    };
 
-      if (left < right) {
-        std::size_t mid = left + (right - left) / 2;
-        adversarial_seq.push_back(points[mid]);
-        std::swap(points[mid], points[left]);
-        left++;
-      }
+    if (points.size() >= PAR_SORT_THRESHOLD) {
+      std::sort(std::execution::par, points.begin(), points.end(), lex_comp);
+    } else {
+      std::sort(points.begin(), points.end(), lex_comp);
     }
 
-    points = std::move(adversarial_seq);
+    std::size_t num_pairs = points.size() / 2;
+
+    struct PairEntry {
+      Point<Dim> p1;
+      Point<Dim> p2;
+      float dist_sq;
+    };
+
+    std::vector<PairEntry> pairs;
+    pairs.reserve(num_pairs);
+
+    for (std::size_t k = 0; k < num_pairs; ++k) {
+      const auto &p1 = points[2 * k];
+      const auto &p2 = points[2 * k + 1];
+      float d_sq = 0.0f;
+      for (std::size_t d = 0; d < Dim; ++d) {
+        float diff = p1.coordinates[d] - p2.coordinates[d];
+        d_sq += diff * diff;
+      }
+      pairs.push_back(PairEntry{p1, p2, d_sq});
+    }
+
+    // Sort pairs in descending order of squared distance so that closest-pair grid
+    // starts with large delta and encounters progressively smaller distances,
+    // maximizing incremental rebuild operations.
+    auto pair_comp = [](const PairEntry &a, const PairEntry &b) noexcept {
+      return a.dist_sq > b.dist_sq;
+    };
+
+    if (pairs.size() >= PAR_SORT_THRESHOLD) {
+      std::sort(std::execution::par, pairs.begin(), pairs.end(), pair_comp);
+    } else {
+      std::sort(pairs.begin(), pairs.end(), pair_comp);
+    }
+
+    bool has_odd = (points.size() % 2 != 0);
+    Point<Dim> odd_point{};
+    if (has_odd) {
+      odd_point = points.back();
+    }
+
+    points.clear();
+    points.reserve(num_pairs * 2 + (has_odd ? 1 : 0));
+
+    for (const auto &pair : pairs) {
+      points.push_back(pair.p1);
+      points.push_back(pair.p2);
+    }
+
+    if (has_odd) {
+      points.push_back(odd_point);
+    }
   }
 };
 

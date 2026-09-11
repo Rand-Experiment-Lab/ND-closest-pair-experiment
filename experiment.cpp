@@ -3,17 +3,23 @@
 #include <cmath>
 #include <cstddef>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <random>
+#include <span>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "closest_pair.h"
 #include "space.h"
 
 using namespace std;
+
+std::string g_current_run_csv_filename = "";
 
 std::string current_timestamp() {
   std::time_t t = std::time(nullptr);
@@ -25,72 +31,51 @@ std::string current_timestamp() {
   return "Unknown";
 }
 
+std::string current_timestamp_file_format() {
+  std::time_t t = std::time(nullptr);
+  char mbstr[100];
+  if (std::strftime(mbstr, sizeof(mbstr), "%Y%m%d_%H%M%S",
+                    std::localtime(&t))) {
+    return mbstr;
+  }
+  return "run";
+}
+
 struct Stats {
   double mean;
   double median;
   double std_dev;
 };
 
+void init_csv_file() {
+  std::filesystem::create_directories("results");
+  g_current_run_csv_filename = "results/experiment_results_" + current_timestamp_file_format() + ".csv";
+  
+  std::ofstream file(g_current_run_csv_filename, std::ios::out);
+  file << "Timestamp,Space_Type,Dimensions,Num_Points,Input_Order,Algorithm,"
+          "Iterations,Min_Distance,Mean_Time_ms,Median_Time_ms,StdDev_Time_ms,"
+          "Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds\n";
+  file.close();
+
+  // Also ensure the primary aggregate experiment_results.csv exists
+  std::ifstream check_agg("experiment_results.csv");
+  if (!check_agg.good()) {
+    std::ofstream agg("experiment_results.csv", std::ios::out);
+    agg << "Timestamp,Space_Type,Dimensions,Num_Points,Input_Order,Algorithm,"
+           "Iterations,Min_Distance,Mean_Time_ms,Median_Time_ms,StdDev_Time_ms,"
+           "Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds\n";
+  }
+}
+
 void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
                 const std::string &input_order, std::string algorithm,
                 int iterations, float min_dist, const Stats &time_st,
                 const std::vector<double> &raw_times, const Stats &rebuild_st,
                 const std::vector<size_t> &raw_rebuilds) {
-  std::string filename = "experiment_results.csv";
-  std::ifstream check_file(filename);
-  bool file_exists = check_file.good();
-  bool has_rebuild_header = false;
-  if (file_exists) {
-    std::string header_line;
-    if (std::getline(check_file, header_line)) {
-      if (header_line.find("Mean_Rebuilds") != std::string::npos) {
-        has_rebuild_header = true;
-      }
-    }
-  }
-  check_file.close();
-
-  // If the file exists but has the older CSV header without rebuild columns,
-  // migrate existing rows so column counts remain consistent for CSV parsers.
-  if (file_exists && !has_rebuild_header) {
-    std::ifstream in(filename);
-    std::vector<std::string> lines;
-    std::string line;
-    bool is_first = true;
-    while (std::getline(in, line)) {
-      if (line.empty())
-        continue;
-      if (is_first) {
-        lines.push_back(
-            line +
-            ",Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds");
-        is_first = false;
-      } else {
-        lines.push_back(line + ",\"\",\"\",\"\",\"\"");
-      }
-    }
-    in.close();
-
-    std::ofstream out(filename, std::ios::trunc);
-    for (const auto &l : lines) {
-      out << l << "\n";
-    }
-    out.close();
-  }
-
-  std::ofstream file(filename, std::ios::app);
-  if (!file_exists) {
-    file << "Timestamp,Space_Type,Dimensions,Num_Points,Input_Order,Algorithm,"
-            "Iterations,Min_Distance,Mean_Time_ms,Median_Time_ms,StdDev_Time_"
-            "ms,Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_"
-            "Rebuilds\n";
-  }
-
   // Trim trailing spaces from algorithm name
   algorithm.erase(algorithm.find_last_not_of(" ") + 1);
 
-  // Format raw times as a JSON-like array inside quotes so CSV parsers treat it
-  // as one column
+  // Format raw times as a JSON-like array inside quotes
   std::ostringstream raw_ss;
   raw_ss << "\"[";
   for (size_t i = 0; i < raw_times.size(); ++i) {
@@ -110,16 +95,27 @@ void log_to_csv(const std::string &space_type, size_t dim, size_t num_points,
   }
   rebuilds_ss << "]\"";
 
-  file << current_timestamp() << "," << space_type << "," << dim << ","
-       << num_points << "," << input_order << "," << algorithm << ","
-       << iterations << "," << std::fixed << std::setprecision(5) << min_dist
-       << "," << std::fixed << std::setprecision(5) << time_st.mean << ","
-       << std::fixed << std::setprecision(5) << time_st.median << ","
-       << std::fixed << std::setprecision(5) << time_st.std_dev << ","
-       << raw_ss.str() << "," << std::fixed << std::setprecision(5)
-       << rebuild_st.mean << "," << std::fixed << std::setprecision(5)
-       << rebuild_st.median << "," << std::fixed << std::setprecision(5)
-       << rebuild_st.std_dev << "," << rebuilds_ss.str() << "\n";
+  std::ostringstream row;
+  row << current_timestamp() << "," << space_type << "," << dim << ","
+      << num_points << "," << input_order << "," << algorithm << ","
+      << iterations << "," << std::fixed << std::setprecision(5) << min_dist
+      << "," << std::fixed << std::setprecision(5) << time_st.mean << ","
+      << std::fixed << std::setprecision(5) << time_st.median << ","
+      << std::fixed << std::setprecision(5) << time_st.std_dev << ","
+      << raw_ss.str() << "," << std::fixed << std::setprecision(5)
+      << rebuild_st.mean << "," << std::fixed << std::setprecision(5)
+      << rebuild_st.median << "," << std::fixed << std::setprecision(5)
+      << rebuild_st.std_dev << "," << rebuilds_ss.str() << "\n";
+
+  // 1. Write to versioned file for this specific run
+  if (!g_current_run_csv_filename.empty()) {
+    std::ofstream ver_file(g_current_run_csv_filename, std::ios::app);
+    ver_file << row.str();
+  }
+
+  // 2. Also append to the primary aggregate experiment_results.csv
+  std::ofstream agg_file("experiment_results.csv", std::ios::app);
+  agg_file << row.str();
 }
 
 template <typename T> Stats compute_statistics(const std::vector<T> &values) {
@@ -150,10 +146,19 @@ template <typename T> Stats compute_statistics(const std::vector<T> &values) {
   return st;
 }
 
+struct AlgoRunResult {
+  std::string label;
+  float min_dist;
+  Stats time_st;
+  Stats rebuild_st;
+  std::vector<double> raw_times;
+  std::vector<size_t> raw_rebuilds;
+};
+
 template <size_t Dim>
-float run_algorithm_multipleTimes(Space<Dim> &s, int k, bool isRand,
-                                  const string &label, const string &space_type,
-                                  const string &input_order) {
+AlgoRunResult run_algorithm_multipleTimes(Space<Dim> &s, int k, bool isRand,
+                                         const string &label, const string &space_type,
+                                         const string &input_order) {
   std::vector<double> execution_times;
   execution_times.reserve(k);
   std::vector<size_t> rebuild_counts;
@@ -161,122 +166,179 @@ float run_algorithm_multipleTimes(Space<Dim> &s, int k, bool isRand,
   float min_val = 0.0f;
   size_t num_points = s.points.size();
 
+  std::vector<Point<Dim>> rand_buffer;
+  if (isRand) {
+    rand_buffer.resize(num_points);
+  }
+
+  std::random_device rd;
+  std::array<std::uint32_t, 8> seed_data{};
+  for (auto &v : seed_data) {
+    v = rd();
+  }
+  std::seed_seq seq(seed_data.begin(), seed_data.end());
+  std::mt19937 g(seq);
+
   for (int i = 0; i < k; i++) {
     size_t rebuilds = 0;
-    auto start = chrono::high_resolution_clock::now();
-    if (isRand) {
-      TimePoint inner_start;
-      min_val = find_min_dist_grid_based_randomized(s, &inner_start, false,
-                                                    &rebuilds);
-      start = inner_start; // Override the start time so we don't include the
-                           // deep copy overhead!
-    } else {
-      min_val = find_min_dist_grid_based(s, false, &rebuilds);
-    }
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double, milli> ms = end - start;
-    execution_times.push_back(ms.count());
-    rebuild_counts.push_back(rebuilds);
+    double measured_ms = 0.0;
 
-    if (k > 1 && (ms.count() > 1000.0 || num_points >= 40000)) {
-      std::cout << "    [Run " << i + 1 << "/" << k << "] " << ms.count()
-                << " ms (" << rebuilds << " rebuilds)\n"
-                << std::flush;
+    if (isRand) {
+      std::copy(s.points.begin(), s.points.end(), rand_buffer.begin());
+      std::shuffle(rand_buffer.begin(), rand_buffer.end(), g);
+
+      auto start = chrono::high_resolution_clock::now();
+      min_val = find_min_dist_grid_based<Dim>(
+          std::span<const Point<Dim>>(rand_buffer), false, &rebuilds);
+      auto end = chrono::high_resolution_clock::now();
+
+      chrono::duration<double, milli> ms = end - start;
+      measured_ms = ms.count();
+    } else {
+      auto start = chrono::high_resolution_clock::now();
+      min_val = find_min_dist_grid_based<Dim>(
+          std::span<const Point<Dim>>(s.points), false, &rebuilds);
+      auto end = chrono::high_resolution_clock::now();
+
+      chrono::duration<double, milli> ms = end - start;
+      measured_ms = ms.count();
     }
+
+    execution_times.push_back(measured_ms);
+    rebuild_counts.push_back(rebuilds);
   }
 
   Stats time_st = compute_statistics(execution_times);
   Stats rebuild_st = compute_statistics(rebuild_counts);
 
-  std::cout << "  > " << label << " | Min Dist: " << min_val << "\n";
-  std::cout << "    Execution Time (ms):\n";
-  std::cout << "      Mean     : " << time_st.mean << " ms\n";
-  std::cout << "      Median   : " << time_st.median << " ms\n";
-  std::cout << "      Std Dev  : " << time_st.std_dev << " ms\n";
-  std::cout << "    Grid Rebuilds:\n";
-  std::cout << "      Mean     : " << rebuild_st.mean << "\n";
-  std::cout << "      Median   : " << rebuild_st.median << "\n";
-  std::cout << "      Std Dev  : " << rebuild_st.std_dev << "\n";
-  std::cout << "\n";
-
   log_to_csv(space_type, Dim, num_points, input_order, label, k, min_val,
              time_st, execution_times, rebuild_st, rebuild_counts);
 
-  return min_val;
+  return AlgoRunResult{label, min_val, time_st, rebuild_st, execution_times, rebuild_counts};
 }
 
+void print_comparison_table(const std::string &scenario_title,
+                            const AlgoRunResult &det,
+                            const AlgoRunResult &rand) {
+  std::cout << "\n  [" << scenario_title << "]\n";
+  std::cout << "  " << std::string(86, '-') << "\n";
+  std::cout << "  " << std::left << std::setw(22) << "Algorithm"
+            << std::right << std::setw(12) << "Mean Time"
+            << std::setw(12) << "Median Time"
+            << std::setw(12) << "StdDev Time"
+            << std::setw(14) << "Mean Rebuilds"
+            << std::setw(14) << "Min Distance"
+            << "\n";
+  std::cout << "  " << std::string(86, '-') << "\n";
+
+  auto print_row = [](const AlgoRunResult &r) {
+    std::cout << "  " << std::left << std::setw(22) << r.label
+              << std::right << std::fixed << std::setprecision(2)
+              << std::setw(9) << r.time_st.mean << " ms"
+              << std::setw(9) << r.time_st.median << " ms"
+              << std::setw(9) << r.time_st.std_dev << " ms"
+              << std::setw(14) << r.rebuild_st.mean
+              << std::setw(14) << std::setprecision(4) << r.min_dist
+              << "\n";
+  };
+
+  print_row(det);
+  print_row(rand);
+  std::cout << "  " << std::string(86, '-') << "\n";
+
+  if (rand.rebuild_st.mean > 0 && det.rebuild_st.mean > rand.rebuild_st.mean) {
+    double reb_reduction = det.rebuild_st.mean / rand.rebuild_st.mean;
+    std::cout << "  => Rebuild Reduction: " << std::fixed << std::setprecision(1)
+              << reb_reduction << "x fewer rebuilds with Randomization!\n";
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Normal Space Test Suite (Original Order & Sorted_X_Axis)
+// ----------------------------------------------------------------------------
 template <size_t Dim>
-void run_normal_space_test(size_t num_points, const string &test_name) {
-  cout << "===================================================================="
-          "==========\n";
-  cout << "[NORMAL SPACE] " << test_name << " [" << num_points << " points in "
-       << Dim << "D]\n";
-  cout << "===================================================================="
-          "==========\n";
+void run_normal_space_test(size_t num_points) {
+  std::cout << "\n" << std::string(90, '=') << "\n";
+  std::cout << "  [NORMAL SPACE] Dimension: " << Dim << "D | Points: " << num_points << "\n";
+  std::cout << std::string(90, '=') << "\n";
 
   auto space = Space<Dim>::get_or_create("uniform", num_points);
   int iterations = 10;
 
-  cout << "--- 1. Original Generation Order ---\n";
-  run_algorithm_multipleTimes(space, iterations, false, "Deterministic Grid",
-                              "Normal", "Original");
-  run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ",
-                              "Normal", "Original");
+  // 1. Original Generation Order
+  auto det_orig = run_algorithm_multipleTimes(space, iterations, false,
+                                             "Deterministic Grid", "Normal", "Original");
+  auto rand_orig = run_algorithm_multipleTimes(space, iterations, true,
+                                              "Randomized Grid", "Normal", "Original");
+  print_comparison_table("1. Original Generation Order (10 runs)", det_orig, rand_orig);
 
-  cout << "--- 2. Sorted Order (Axis Ascending) ---\n";
+  // 2. Sorted Order (Axis Ascending along Axis 0)
   space.sort_points(SortStrategy::AxisAscending, 0);
-  run_algorithm_multipleTimes(space, iterations, false, "Deterministic Grid",
-                              "Normal", "Sorted_X_Axis");
-  run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ",
-                              "Normal", "Sorted_X_Axis");
+  auto det_sort = run_algorithm_multipleTimes(space, iterations, false,
+                                             "Deterministic Grid", "Normal", "Sorted_X_Axis");
+  auto rand_sort = run_algorithm_multipleTimes(space, iterations, true,
+                                              "Randomized Grid", "Normal", "Sorted_X_Axis");
+  print_comparison_table("2. Sorted Order (X-Axis Ascending) (10 runs)", det_sort, rand_sort);
 }
 
+// ----------------------------------------------------------------------------
+// Adversarial Space Test Suite (Geometric Ladder of Decreasing Pairs)
+// ----------------------------------------------------------------------------
 template <size_t Dim>
-void run_adversarial_space_test(size_t num_points, const string &test_name) {
-  cout << "===================================================================="
-          "==========\n";
-  cout << "[ADVERSARIAL SPACE] " << test_name << " [" << num_points
-       << " points in " << Dim << "D]\n";
-  cout << "===================================================================="
-          "==========\n";
+void run_adversarial_space_test(size_t num_points) {
+  std::cout << "\n" << std::string(90, '=') << "\n";
+  std::cout << "  [ADVERSARIAL SPACE] Dimension: " << Dim << "D | Points: " << num_points << "\n";
+  std::cout << std::string(90, '=') << "\n";
 
   auto space = Space<Dim>::get_or_create("adversarial", num_points);
-  // For adversarial datasets, use 2 deterministic iterations (near-zero
-  // variance) to prevent excessive runtime, while running 10 randomized
-  // iterations.
-  int det_iterations = 2;
-  int rand_iterations = 10;
+  int iterations = 10;
 
-  cout << "--- 1. Adversarial Generation Order ---\n";
-  run_algorithm_multipleTimes(space, det_iterations, false,
-                              "Deterministic Grid", "Adversarial",
-                              "Ladder_of_Pairs");
-  run_algorithm_multipleTimes(space, rand_iterations, true,
-                              "Randomized Grid   ", "Adversarial",
-                              "Ladder_of_Pairs");
+  // 1. Adversarial Ladder of Pairs
+  auto det_adv = run_algorithm_multipleTimes(space, iterations, false,
+                                            "Deterministic Grid", "Adversarial", "Ladder_of_Pairs");
+  auto rand_adv = run_algorithm_multipleTimes(space, iterations, true,
+                                             "Randomized Grid", "Adversarial", "Ladder_of_Pairs");
+  print_comparison_table("1. Adversarial Ladder of Pairs (10 runs)", det_adv, rand_adv);
+
+  // 2. Sorted X-Axis on Adversarial Space
+  space.sort_points(SortStrategy::AxisAscending, 0);
+  auto det_sort = run_algorithm_multipleTimes(space, iterations, false,
+                                             "Deterministic Grid", "Adversarial", "Sorted_X_Axis");
+  auto rand_sort = run_algorithm_multipleTimes(space, iterations, true,
+                                              "Randomized Grid", "Adversarial", "Sorted_X_Axis");
+  print_comparison_table("2. Sorted X-Axis on Adversarial Space (10 runs)", det_sort, rand_sort);
 }
 
+// ----------------------------------------------------------------------------
+// Dimension Drivers (Dimensions: 2D, 3D, 5D, 7D)
+// ----------------------------------------------------------------------------
 template <size_t Dim> void run_all_normal_tests_for_dim() {
-  cout << "\n------------------ " << Dim
-       << "D Normal Space Tests (500k -> 1.5M) ------------------\n";
-  for (size_t n = 500'000; n <= 1'500'000; n += 100'000) {
-    run_normal_space_test<Dim>(n, to_string(Dim) + "D Set");
+  std::cout << "\n" << std::string(90, '#') << "\n";
+  std::cout << "  STARTING " << Dim << "D NORMAL SPACE EXPERIMENTS (50k -> 500k)\n";
+  std::cout << std::string(90, '#') << "\n";
+  // Uniform point counts calibrated for < 5 hours across all dimensions:
+  const std::vector<size_t> point_counts = {50'000, 100'000, 200'000, 350'000, 500'000};
+  for (size_t n : point_counts) {
+    run_normal_space_test<Dim>(n);
   }
 }
 
 template <size_t Dim> void run_all_adversarial_tests_for_dim() {
-  cout << "\n------------------ " << Dim
-       << "D Adversarial Space Tests (20k -> 70k) ------------------\n";
-  for (size_t n = 20'000; n <= 70'000; n += 10'000) {
-    run_adversarial_space_test<Dim>(n, to_string(Dim) + "D Set");
+  std::cout << "\n" << std::string(90, '#') << "\n";
+  std::cout << "  STARTING " << Dim << "D ADVERSARIAL SPACE EXPERIMENTS (5k -> 25k)\n";
+  std::cout << std::string(90, '#') << "\n";
+  // Uniform point counts calibrated for quadratic rebuilds under 5 hours:
+  const std::vector<size_t> point_counts = {5'000, 10'000, 15'000, 20'000, 25'000};
+  for (size_t n : point_counts) {
+    run_adversarial_space_test<Dim>(n);
   }
 }
 
 void print_usage(const char* prog_name) {
   cout << "Usage:\n"
-       << "  " << prog_name << "               # Run all experiments (Normal + Adversarial)\n"
+       << "  " << prog_name << "               # Run all experiments (Normal + Adversarial across 2D, 3D, 5D, 7D)\n"
        << "  " << prog_name << " normal        # Run only Normal space experiments (Original & Sorted)\n"
-       << "  " << prog_name << " adversarial   # Run only Adversarial space experiments (Ladder of Pairs)\n";
+       << "  " << prog_name << " adversarial   # Run only Adversarial space experiments (Ladder of Pairs & Sorted)\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -306,49 +368,49 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  // Initialize versioned CSV file in results/ folder
+  init_csv_file();
+
   cout << fixed << setprecision(5);
-  cout << "\nStarting Restructured Closest Pair Performance Experiments...\n";
+  cout << "\n================================================================================\n";
+  cout << "            SCIENTIFIC CLOSEST PAIR PERFORMANCE EXPERIMENT SUITE                \n";
+  cout << "================================================================================\n";
   if (run_normal && run_adversarial) {
-    cout << "Mode: ALL EXPERIMENTS (Normal + Adversarial)\n";
+    cout << "Mode: ALL EXPERIMENTS (Normal: 50k->500k + Adversarial: 5k->25k across 2D, 3D, 5D, 7D)\n";
   } else if (run_normal) {
-    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 500k -> 1.5M)\n";
+    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted: 50k -> 500k)\n";
   } else {
-    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 20k -> 70k)\n";
+    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs & Sorted: 5k -> 25k)\n";
   }
-  cout << "All results are continuously logged to experiment_results.csv.\n\n";
+  cout << "Iterations per test: 10 runs\n";
+  cout << "Logging results to:\n";
+  cout << "  - Versioned run file : " << g_current_run_csv_filename << "\n";
+  cout << "  - Primary aggregate  : experiment_results.csv\n";
+  cout << "================================================================================\n\n";
 
   // =========================================================================
-  // PHASE 1: NORMAL SPACE EXPERIMENTS (500k -> 1.5M)
+  // PHASE 1: NORMAL SPACE EXPERIMENTS (50k -> 500k across 2D, 3D, 5D, 7D)
   // =========================================================================
   if (run_normal) {
-    cout << "===================================================================="
-            "==========\n";
-    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED, 500k -> 1.5M)\n";
-    cout << "===================================================================="
-            "==========\n";
     run_all_normal_tests_for_dim<2>();
     run_all_normal_tests_for_dim<3>();
     run_all_normal_tests_for_dim<5>();
     run_all_normal_tests_for_dim<7>();
-    run_all_normal_tests_for_dim<9>();
   }
 
   // =========================================================================
-  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (20k -> 70k)
+  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (5k -> 25k across 2D, 3D, 5D, 7D)
   // =========================================================================
   if (run_adversarial) {
-    cout << "\n=================================================================="
-            "============\n";
-    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS, 20k -> 70k)\n";
-    cout << "===================================================================="
-            "==========\n";
     run_all_adversarial_tests_for_dim<2>();
     run_all_adversarial_tests_for_dim<3>();
     run_all_adversarial_tests_for_dim<5>();
     run_all_adversarial_tests_for_dim<7>();
-    run_all_adversarial_tests_for_dim<9>();
   }
 
-  cout << "\nAll selected experiments completed successfully!\n";
+  cout << "\n================================================================================\n";
+  cout << "All selected experiments completed successfully!\n";
+  cout << "Results saved to: " << g_current_run_csv_filename << "\n";
+  cout << "================================================================================\n";
   return 0;
 }
