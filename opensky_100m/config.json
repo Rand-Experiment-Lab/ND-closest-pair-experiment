@@ -1,0 +1,29 @@
+{
+  "project_name": "OpenSky_100M_Closest_Pair",
+  "dates": [
+    "2019-05-20",
+    "2019-05-27",
+    "2019-06-03"
+  ],
+  "min_hours_per_day": 24,
+  "alpha_velocity_m_s": 250.0,
+  "min_separation_m": 0.05,
+  "time_reference_mode": "day1_midnight_utc",
+  "contiguous_3days": true,
+  "data_dir": "data",
+  "results_dir": "results",
+  "output_bin": "data/opensky_3days_100M_4d.bin",
+  "output_csv": "results/opensky_100M_results.csv",
+  "iterations": 10,
+  "progress_interval_percent": 5.0,
+  "s3_base_url": "https://s3.opensky-network.org/data-samples",
+  "dataset_metadata": {
+    "total_4d_points": 133484198,
+    "file_size_gb": 2.49,
+    "time_reference_epoch": 1558310400.0,
+    "time_reference_human": "2019-05-20 00:00:00 UTC",
+    "total_hours": 72,
+    "dim": 4
+  }
+}
+

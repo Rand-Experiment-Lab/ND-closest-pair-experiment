@@ -17,4 +17,7 @@ add_executable(experiment_quick experiment_quick.cpp)
 target_link_libraries(experiment_quick tbb)
 add_executable(benchmark_hashers benchmark_hashers.cpp)
 target_link_libraries(benchmark_hashers tbb)
-
+add_executable(experiment_opensky opensky_experiment/experiment_opensky.cpp)
+target_link_libraries(experiment_opensky tbb)
+add_executable(experiment_opensky_hourly opensky_experiment/experiment_opensky_hourly.cpp)
+target_link_libraries(experiment_opensky_hourly tbb)

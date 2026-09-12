@@ -34,28 +34,93 @@ cmake -B build -S .
 cmake --build build -j$(nproc)
 ```
 
-### 3. Run Executables
+### 3. Run Synthetic Space Benchmarks (from `build/`)
 
 ```bash
+cd build
+
 # Verify correctness (Grid vs Brute Force baseline)
-./build/verify
+./verify
 
-# Run quick benchmark verification (supports: 'normal', 'adversarial', or no argument for all)
-./build/experiment_quick
-./build/experiment_quick normal
-./build/experiment_quick adversarial
+# Run quick benchmark verification
+./experiment_quick
+./experiment_quick normal
+./experiment_quick adversarial
 
-# Run performance benchmark suite
-./build/experiment              # Runs both Normal (100k-1M) and Adversarial (10k-50k)
-./build/experiment normal       # Runs only Normal space experiments (Original & Sorted)
-./build/experiment adversarial  # Runs only Adversarial space experiments (Ladder of Pairs)
+# Run synthetic performance benchmark suite
+./experiment              # Runs both Normal (100k-1M) and Adversarial (10k-50k)
+./experiment normal       # Runs only Normal space experiments (Original & Sorted)
+./experiment adversarial  # Runs only Adversarial space experiments (Ladder of Pairs)
 
-# (Optional) Pre-generate binary dataset caches matching the experiment suites
-./build/data_set_generator
-
-# (Optional) Generate benchmark plots
-python3 plot_advanced.py
+# (Optional) Pre-generate binary dataset caches
+./data_set_generator
 ```
+
+---
+
+## Real-World OpenSky 4D ADS-B Benchmark
+
+All real-world experiments are executed with the **`build/` folder as the reference point**. All raw inputs, intermediate outputs, and results resolve relative to `build/`:
+- **Raw Data:** `../opensky_experiment/data/<date>/` (contains raw `states_*.csv.gz`)
+- **Intermediate Outputs:** `../opensky_experiment/data/<date>_hourly/` (contains 24 cleaned CSVs and 24 `.bin` files)
+- **Benchmark Results:** `../opensky_experiment/results/` (timestamped result CSVs)
+
+### 1. Compile OpenSky Targets (from project root or `build/`)
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target experiment_opensky experiment_opensky_hourly -j$(nproc)
+```
+
+### 2. Hourly Benchmark Workflow (24 Hours x 4 Scenarios)
+
+From inside `build/`:
+
+```bash
+cd build
+
+# Step A: Preprocess raw hourly .csv.gz archives into 4D Cartesian (x, y, z, w)
+python3 ../opensky_experiment/scripts/preprocess_hourly_opensky.py \
+  ../opensky_experiment/data/2019-05-27 \
+  ../opensky_experiment/data/2019-05-27_hourly
+
+# Step B: Run the 4-test benchmark suite (10 iterations, 0.05m non-zero filter)
+./experiment_opensky_hourly ../opensky_experiment/data/2019-05-27_hourly 10 0.05
+```
+*Results automatically saved to: `../opensky_experiment/results/opensky_hourly_results_<timestamp>.csv`*
+
+### 3. Full-Day Consolidated Benchmark (39 Million Points)
+
+From inside `build/`:
+
+```bash
+cd build
+
+# Step A: (Optional) Preprocess all 24 hours into a single consolidated binary
+python3 ../opensky_experiment/scripts/preprocess_day_opensky.py \
+  ../opensky_experiment/data/2019-05-27 \
+  ../opensky_experiment/data/opensky_2019-05-27_full_day_4d.bin
+
+# Step B: Run full-day benchmark across 4 order scenarios
+./experiment_opensky ../opensky_experiment/data/opensky_2019-05-27_full_day_4d.bin 10 0.05
+```
+*Results automatically saved to: `../opensky_experiment/results/opensky_results_<timestamp>.csv`*
+
+### 4. All-in-One Automated Pipeline (Download, Preprocess & Benchmark)
+
+From inside `build/`:
+
+```bash
+cd build
+
+# Run for a specific day:
+python3 ../opensky_experiment/scripts/run_automated_pipeline.py --date 2019-05-27
+
+# Run batch sequentially across all available 25 dates with all 24 hours:
+python3 ../opensky_experiment/scripts/run_automated_pipeline.py --all-dates --min-hours 24
+```
+
+For complete technical documentation on the ECEF spatial projection, metric velocity scaling $\alpha$, and Strategy 2 intra-flight pruning, refer to [DEVELOPER_DOCS.md](file:///media/vithurshan/vithu/rand/opensky_experiment/DEVELOPER_DOCS.md).
 
 ---
 

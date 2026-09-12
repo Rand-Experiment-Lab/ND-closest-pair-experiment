@@ -1,0 +1,5 @@
+Timestamp,Dataset,Dimensions,Num_Points,Min_Separation_m,Input_Order,Algorithm,Iterations,Min_Distance_m,Flight1_ID,Flight2_ID,Flight1_Epoch_UTC,Flight2_Epoch_UTC,Mean_Time_ms,Median_Time_ms,StdDev_Time_ms,Raw_Times_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Rebuilds
+2026-09-11 23:21:55,OpenSky,4,39037788,0.05,Original,Deterministic Grid,1,0.250,16014,16038,1558929570.0,1558929570.0,484224.033,484224.033,0.000,"[484224.03301]",26.00,26.00,0.00,"[26]"
+2026-09-11 23:31:02,OpenSky,4,39037788,0.05,Original,Randomized Grid,1,0.250,16014,16038,1558929570.0,1558929570.0,532119.625,532119.625,0.000,"[532119.62491]",24.00,24.00,0.00,"[24]"
+2026-09-11 23:38:17,OpenSky,4,39037788,0.05,Sorted_Time_Axis,Deterministic Grid,1,0.250,16038,16014,1558929570.0,1558929570.0,434956.140,434956.140,0.000,"[434956.14050]",26.00,26.00,0.00,"[26]"
+2026-09-11 23:45:16,OpenSky,4,39037788,0.05,Sorted_Time_Axis,Randomized Grid,1,0.250,16038,16014,1558929570.0,1558929570.0,417703.040,417703.040,0.000,"[417703.04013]",38.00,38.00,0.00,"[38]"
