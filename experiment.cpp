@@ -261,19 +261,20 @@ void run_normal_space_test(size_t num_points, const string &test_name) {
           "==========\n";
 
   auto space = Space<Dim>::get_or_create("uniform", num_points);
-  int iterations = 10;
+  int det_iterations = (num_points <= 300'000) ? 10 : 5;
+  int rand_iterations = 10;
 
   cout << "--- 1. Original Generation Order ---\n";
-  run_algorithm_multipleTimes(space, iterations, false, "Deterministic Grid",
+  run_algorithm_multipleTimes(space, det_iterations, false, "Deterministic Grid",
                               "Normal", "Original");
-  run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ",
+  run_algorithm_multipleTimes(space, rand_iterations, true, "Randomized Grid   ",
                               "Normal", "Original");
 
   cout << "--- 2. Sorted Order (Axis Ascending) ---\n";
   space.sort_points(SortStrategy::AxisAscending, 0);
-  run_algorithm_multipleTimes(space, iterations, false, "Deterministic Grid",
+  run_algorithm_multipleTimes(space, det_iterations, false, "Deterministic Grid",
                               "Normal", "Sorted_X_Axis");
-  run_algorithm_multipleTimes(space, iterations, true, "Randomized Grid   ",
+  run_algorithm_multipleTimes(space, rand_iterations, true, "Randomized Grid   ",
                               "Normal", "Sorted_X_Axis");
 }
 
@@ -304,16 +305,16 @@ void run_adversarial_space_test(size_t num_points, const string &test_name) {
 
 template <size_t Dim> void run_all_normal_tests_for_dim() {
   cout << "\n------------------ " << Dim
-       << "D Normal Space Tests (500k -> 1.5M) ------------------\n";
-  for (size_t n = 500'000; n <= 1'500'000; n += 100'000) {
+       << "D Normal Space Tests (100k -> 1M) ------------------\n";
+  for (size_t n = 100'000; n <= 1'000'000; n += 100'000) {
     run_normal_space_test<Dim>(n, to_string(Dim) + "D Set");
   }
 }
 
 template <size_t Dim> void run_all_adversarial_tests_for_dim() {
   cout << "\n------------------ " << Dim
-       << "D Adversarial Space Tests (20k -> 70k) ------------------\n";
-  for (size_t n = 20'000; n <= 70'000; n += 10'000) {
+       << "D Adversarial Space Tests (10k -> 50k) ------------------\n";
+  for (size_t n = 10'000; n <= 50'000; n += 10'000) {
     run_adversarial_space_test<Dim>(n, to_string(Dim) + "D Set");
   }
 }
@@ -357,19 +358,19 @@ int main(int argc, char* argv[]) {
   if (run_normal && run_adversarial) {
     cout << "Mode: ALL EXPERIMENTS (Normal + Adversarial)\n";
   } else if (run_normal) {
-    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 500k -> 1.5M)\n";
+    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted, 100k -> 1M)\n";
   } else {
-    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 20k -> 70k)\n";
+    cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs, 10k -> 50k)\n";
   }
   cout << "All results are continuously logged to experiment_results.csv.\n\n";
 
   // =========================================================================
-  // PHASE 1: NORMAL SPACE EXPERIMENTS (500k -> 1.5M)
+  // PHASE 1: NORMAL SPACE EXPERIMENTS (100k -> 1M)
   // =========================================================================
   if (run_normal) {
     cout << "===================================================================="
             "==========\n";
-    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED, 500k -> 1.5M)\n";
+    cout << "  PHASE 1: NORMAL SPACE EXPERIMENTS (ORIGINAL & SORTED, 100k -> 1M)\n";
     cout << "===================================================================="
             "==========\n";
     run_all_normal_tests_for_dim<2>();
@@ -380,12 +381,12 @@ int main(int argc, char* argv[]) {
   }
 
   // =========================================================================
-  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (20k -> 70k)
+  // PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (10k -> 50k)
   // =========================================================================
   if (run_adversarial) {
     cout << "\n=================================================================="
             "============\n";
-    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS, 20k -> 70k)\n";
+    cout << "  PHASE 2: ADVERSARIAL SPACE EXPERIMENTS (LADDER OF PAIRS, 10k -> 50k)\n";
     cout << "===================================================================="
             "==========\n";
     run_all_adversarial_tests_for_dim<2>();

@@ -7,3 +7,6 @@ experiment_results.csv
 .venv/
 *.zip
 datasets/
+results/
+build.sh
+*.csv
