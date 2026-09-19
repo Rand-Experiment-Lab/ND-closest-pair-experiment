@@ -24,6 +24,8 @@ struct ClosestPairResult {
   PointType p1{};
   PointType p2{};
   std::size_t rebuild_count{0};
+  std::size_t rebuild_work{0}; // Sum of (i + 1) points re-inserted across all rebuilds
+  std::vector<std::size_t> rebuild_indices{}; // Exact insertion indices where rebuilds triggered
   double execution_time_ms{0.0};
 };
 
@@ -48,6 +50,7 @@ find_closest_pair_grid(std::span<const PointType> points,
                        Filter filter = Filter{},
                        bool verbose = false) {
   ClosestPairResult<PointType> result;
+  result.rebuild_indices.reserve(64); // Pre-allocate to prevent any reallocations
   const std::size_t n = points.size();
 
   if (n < 2) {
@@ -59,32 +62,31 @@ find_closest_pair_grid(std::span<const PointType> points,
   static const std::vector<GridCell<Dim>> neighbor_offsets =
       compute_neighbor_offsets<Dim>();
 
-  // Initial estimate from the first pair that passes the filter policy
+  // Find the first valid pair to establish initial delta
   float delta = std::numeric_limits<float>::infinity();
-  std::size_t first_pair_i = 0, first_pair_j = 1;
-  bool found_initial = false;
+  std::size_t first_pair_i = 0;
+  std::size_t first_pair_j = 1;
+  bool found_first_pair = false;
 
-  for (std::size_t i = 0; i < std::min<std::size_t>(n, 50); ++i) {
-    for (std::size_t j = i + 1; j < std::min<std::size_t>(n, 50); ++j) {
-      if (filter(points[i], points[j])) {
-        float d = points[i].distance_to(points[j]);
-        if (d < delta) {
-          delta = d;
-          result.p1 = points[i];
-          result.p2 = points[j];
-          first_pair_i = i;
-          first_pair_j = j;
-          found_initial = true;
+  for (std::size_t i = 0; i < n && !found_first_pair; ++i) {
+    for (std::size_t j = i + 1; j < n && !found_first_pair; ++j) {
+      if constexpr (!Filter::is_trivial) {
+        if (!filter(points[i], points[j])) {
+          continue;
         }
       }
+      delta = points[i].distance_to(points[j]);
+      result.p1 = points[i];
+      result.p2 = points[j];
+      first_pair_i = i;
+      first_pair_j = j;
+      found_first_pair = true;
     }
   }
 
-  // Fallback if initial scan didn't find a valid pair
-  if (!found_initial) {
-    delta = points[0].distance_to(points[1]);
-    result.p1 = points[0];
-    result.p2 = points[1];
+  if (!found_first_pair) {
+    result.min_distance = 0.0f;
+    return result;
   }
 
   if (delta <= 0.0f) {
@@ -147,6 +149,8 @@ find_closest_pair_grid(std::span<const PointType> points,
 
     if (rebuild) {
       rebuild_count++;
+      result.rebuild_indices.push_back(i);
+      result.rebuild_work += (i + 1);
       if (verbose) {
         std::cout << "[Grid] Rebuild #" << rebuild_count << " at point " << i
                   << " -> new delta: " << delta << "\n";
