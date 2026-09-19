@@ -148,34 +148,89 @@ def plot_hypothesis_verification(sum_df, output_dir, prefix="rebuild_work"):
     plt.close()
     print(f"[Plot 2/2] Saved variance comparison bar chart: {plot2_path}")
 
+def plot_cross_platform_comparison(local_df, server_df, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    sns.set_theme(style="whitegrid", font="sans-serif")
+
+    merged = pd.merge(local_df, server_df, on=['Suite', 'Dataset', 'Dim', 'N'], suffixes=('_Local', '_Server'))
+    if merged.empty:
+        print("[Comparison] Warning: No matching datasets between Local and Server CSVs.")
+        return
+
+    # Comparative Plot 1: r(Work) on Local vs Server
+    plt.figure(figsize=(12, 6), dpi=300)
+    x = np.arange(len(merged))
+    width = 0.35
+
+    plt.bar(x - width/2, merged['r_Work_Local'], width, label='Local PC r(Work)', color='#1976d2', edgecolor='#0d47a1')
+    plt.bar(x + width/2, merged['r_Work_Server'], width, label='Server r(Work)', color='#388e3c', edgecolor='#1b5e20')
+
+    plt.axhline(0.8, color='#d32f2f', linestyle=':', alpha=0.7, label='High Correlation Baseline (r = 0.8)')
+    plt.xticks(x, merged['Dataset'], rotation=35, ha='right', fontsize=9.5)
+    plt.ylabel('Pearson Correlation Coefficient r(Work, Time)', fontsize=11, fontweight='bold')
+    plt.title('Cross-Platform Invariance: Local PC vs. Server\nRebuild Work Dominance Across Architectures',
+              fontsize=13, fontweight='bold', pad=12)
+    plt.ylim(0, 1.05)
+    plt.legend(frameon=True, fontsize=10, loc='lower left')
+    plt.tight_layout()
+    cmp_plot = os.path.join(output_dir, "03_local_vs_server_r_work_comparison.png")
+    plt.savefig(cmp_plot)
+    plt.close()
+    print(f"[Comparison Plot] Saved cross-platform comparison: {cmp_plot}")
+
+    # Comparative Summary CSV
+    cmp_csv = os.path.join(output_dir, "local_vs_server_rebuild_work_comparison.csv")
+    cols = ['Suite', 'Dataset', 'Dim', 'N', 'r_Work_Local', 'r_Work_Server', 'R2_Work_Pct_Local', 'R2_Work_Pct_Server', 'Mean_Time_ms_Local', 'Mean_Time_ms_Server']
+    avail_cols = [c for c in cols if c in merged.columns]
+    merged[avail_cols].to_csv(cmp_csv, index=False)
+    print(f"[Comparison CSV] Saved cross-platform summary: {cmp_csv}")
+    print("\n" + "="*105)
+    print("                     CROSS-PLATFORM COMPARISON: LOCAL PC vs. SERVER                     ")
+    print("="*105)
+    print(merged[avail_cols].to_string(index=False))
+    print("="*105)
+
 def main():
     if len(sys.argv) < 2:
         candidates = sorted(glob.glob('storage/results/rebuild_work/rebuild_work_*.csv'))
         if not candidates:
             print("Usage: python3 analyze_rebuild_work_hypothesis.py <path_to_rebuild_work.csv> [<second_csv_for_comparison>]")
             sys.exit(1)
-        csv_path = candidates[-1]
+        csv_path1 = candidates[-1]
+        csv_path2 = None
+    elif len(sys.argv) == 2:
+        csv_path1 = sys.argv[1]
+        csv_path2 = None
     else:
-        csv_path = sys.argv[1]
+        csv_path1 = sys.argv[1]
+        csv_path2 = sys.argv[2]
 
-    print(f"[Analyzer] Loading: {csv_path}")
-    df = parse_rebuild_benchmark_csv(csv_path)
-    summary_df = analyze_dataset_correlations(df)
+    print(f"[Analyzer] Loading: {csv_path1}")
+    df1 = parse_rebuild_benchmark_csv(csv_path1)
+    summary_df1 = analyze_dataset_correlations(df1)
 
-    out_dir = os.path.splitext(csv_path)[0] + "_analysis"
-    os.makedirs(out_dir, exist_ok=True)
-    summary_csv = os.path.join(out_dir, "rebuild_work_vs_count_summary.csv")
-    summary_df.to_csv(summary_csv, index=False)
+    out_dir1 = os.path.splitext(csv_path1)[0] + "_analysis"
+    os.makedirs(out_dir1, exist_ok=True)
+    summary_csv1 = os.path.join(out_dir1, "rebuild_work_vs_count_summary.csv")
+    summary_df1.to_csv(summary_csv1, index=False)
 
     print("\n" + "="*95)
     print("                REBUILD WORK INVARIANCE HYPOTHESIS: STATISTICAL VERIFICATION             ")
     print("="*95)
     cols = ['Suite', 'Dataset', 'Dim', 'N', 'r_Work', 'R2_Work_Pct', 'r_Count', 'R2_Count_Pct', 'Superior_Metric']
-    print(summary_df[cols].to_string(index=False))
+    print(summary_df1[cols].to_string(index=False))
     print("="*95)
-    print(f"[Summary CSV] Saved to: {summary_csv}")
+    print(f"[Summary CSV] Saved to: {summary_csv1}")
 
-    plot_hypothesis_verification(summary_df, out_dir)
+    plot_hypothesis_verification(summary_df1, out_dir1)
+
+    if csv_path2:
+        print(f"\n[Analyzer] Loading Second CSV for Cross-Platform Comparison: {csv_path2}")
+        df2 = parse_rebuild_benchmark_csv(csv_path2)
+        summary_df2 = analyze_dataset_correlations(df2)
+        cmp_dir = os.path.join(os.path.dirname(csv_path1), "local_vs_server_comparison")
+        plot_cross_platform_comparison(summary_df1, summary_df2, cmp_dir)
 
 if __name__ == '__main__':
     main()
+
