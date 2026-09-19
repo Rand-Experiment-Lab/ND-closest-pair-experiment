@@ -29,3 +29,6 @@ target_link_libraries(bin_opensky PRIVATE TBB::tbb Threads::Threads)
 
 add_executable(bin_cache experiments/cache/benchmark_cache.cpp)
 target_link_libraries(bin_cache PRIVATE TBB::tbb Threads::Threads)
+
+add_executable(bin_rebuild_work experiments/rebuild_work/benchmark_rebuild_work.cpp)
+target_link_libraries(bin_rebuild_work PRIVATE TBB::tbb Threads::Threads)

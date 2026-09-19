@@ -30,7 +30,9 @@ struct ClosestPairResult {
   std::size_t non_empty_cells_hit{0}; // Suspect 2: Neighbor cell probes that found points
   std::size_t distance_evals{0};      // Suspect 3: 4D Euclidean distance checks performed
   std::size_t peak_occupied_cells{0}; // Suspect 5: Peak distinct cells in hash table
+  std::size_t empty_cell_probes{0};   // Suspect 7: Probes that encountered empty buckets
   
+  double rebuild_time_ms{0.0};        // Direct duration spent executing rebuild loops
   double shuffle_time_ms{0.0};        // Suspect 4: Randomization shuffle latency
   double execution_time_ms{0.0};
 };
@@ -156,6 +158,7 @@ find_closest_pair_grid(std::span<const PointType> points,
     }
 
     if (rebuild) {
+      auto t_rebuild_start = std::chrono::high_resolution_clock::now();
       result.peak_occupied_cells = std::max(result.peak_occupied_cells, grid_map.size());
       rebuild_count++;
       result.rebuild_indices.push_back(i);
@@ -169,10 +172,18 @@ find_closest_pair_grid(std::span<const PointType> points,
         const auto &pj = points[j];
         grid_map[to_grid_cell<Dim>(pj, delta)].push_back(pj);
       }
+      auto t_rebuild_end = std::chrono::high_resolution_clock::now();
+      result.rebuild_time_ms +=
+          std::chrono::duration<double, std::milli>(t_rebuild_end - t_rebuild_start).count();
     } else {
       grid_map[current_cell].push_back(pi);
     }
   }
+
+  const std::size_t total_probes = (n > init_limit) ? (n - init_limit - 1) * neighbor_offsets.size() : 0;
+  result.empty_cell_probes = (total_probes >= result.non_empty_cells_hit)
+                                 ? (total_probes - result.non_empty_cells_hit)
+                                 : 0;
 
   result.peak_occupied_cells = std::max(result.peak_occupied_cells, grid_map.size());
   result.min_distance = delta;
