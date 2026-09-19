@@ -254,31 +254,34 @@ void print_comparison_table(const std::string &scenario_title,
 }
 
 // ----------------------------------------------------------------------------
-// Normal Space Test Suite (Original Order & Sorted_X_Axis)
+// Normal Space Test Suite (Original Order vs. Pre-Shuffled Stored & Loaded)
 // ----------------------------------------------------------------------------
 template <size_t Dim>
-void run_normal_space_test(size_t num_points) {
+void run_normal_space_test(size_t num_points, int iterations = 5) {
   std::cout << "\n" << std::string(90, '=') << "\n";
-  std::cout << "  [NORMAL SPACE] Dimension: " << Dim << "D | Points: " << num_points << "\n";
+  std::cout << "  [NORMAL SPACE: STORE & LOAD SHUFFLED] Dimension: " << Dim << "D | Points: " << num_points << "\n";
   std::cout << std::string(90, '=') << "\n";
 
+  // 1. Load original uniform dataset from disk
   auto space = Space<Dim>::get_or_create("uniform", num_points);
-  int iterations = 10;
 
-  // 1. Original Generation Order
+  // 2. Load pre-shuffled uniform dataset from disk (stored & loaded fresh, zero in-loop shuffle)
+  auto rand_space = Space<Dim>::get_or_create("uniform_shuffled", num_points);
+
+  // 1. Original Generation Order vs Pre-Shuffled Loaded
   auto det_orig = run_algorithm_multipleTimes(space, iterations, false,
                                              "Deterministic Grid", "Normal", "Original");
-  auto rand_orig = run_algorithm_multipleTimes(space, iterations, true,
+  auto rand_orig = run_algorithm_multipleTimes(rand_space, iterations, false,
                                               "Randomized Grid", "Normal", "Original");
-  print_comparison_table("1. Original Generation Order (10 runs)", det_orig, rand_orig);
+  print_comparison_table("1. Original Order vs. Pre-Shuffled Stored/Loaded (" + std::to_string(iterations) + " runs)", det_orig, rand_orig);
 
-  // 2. Sorted Order (Axis Ascending along Axis 0)
+  // 2. Sorted Order (Axis Ascending along Axis 0) vs Pre-Shuffled Loaded
   space.sort_points(SortStrategy::AxisAscending, 0);
   auto det_sort = run_algorithm_multipleTimes(space, iterations, false,
                                              "Deterministic Grid", "Normal", "Sorted_X_Axis");
-  auto rand_sort = run_algorithm_multipleTimes(space, iterations, true,
+  auto rand_sort = run_algorithm_multipleTimes(rand_space, iterations, false,
                                               "Randomized Grid", "Normal", "Sorted_X_Axis");
-  print_comparison_table("2. Sorted Order (X-Axis Ascending) (10 runs)", det_sort, rand_sort);
+  print_comparison_table("2. Sorted X-Axis vs. Pre-Shuffled Stored/Loaded (" + std::to_string(iterations) + " runs)", det_sort, rand_sort);
 }
 
 // ----------------------------------------------------------------------------
@@ -312,14 +315,17 @@ void run_adversarial_space_test(size_t num_points) {
 // ----------------------------------------------------------------------------
 // Dimension Drivers (Dimensions: 2D, 3D, 5D, 7D)
 // ----------------------------------------------------------------------------
-template <size_t Dim> void run_all_normal_tests_for_dim() {
+// ----------------------------------------------------------------------------
+// Dimension Drivers (Dimensions: 2D, 3D, 5D, 7D)
+// ----------------------------------------------------------------------------
+template <size_t Dim> void run_all_normal_tests_for_dim(int iterations = 5) {
   std::cout << "\n" << std::string(90, '#') << "\n";
   std::cout << "  STARTING " << Dim << "D NORMAL SPACE EXPERIMENTS (50k -> 500k)\n";
   std::cout << std::string(90, '#') << "\n";
-  // Uniform point counts calibrated for < 5 hours across all dimensions:
+  // Uniform point counts calibrated for benchmark suite:
   const std::vector<size_t> point_counts = {50'000, 100'000, 200'000, 350'000, 500'000};
   for (size_t n : point_counts) {
-    run_normal_space_test<Dim>(n);
+    run_normal_space_test<Dim>(n, iterations);
   }
 }
 
@@ -336,14 +342,15 @@ template <size_t Dim> void run_all_adversarial_tests_for_dim() {
 
 void print_usage(const char* prog_name) {
   cout << "Usage:\n"
-       << "  " << prog_name << "               # Run all experiments (Normal + Adversarial across 2D, 3D, 5D, 7D)\n"
-       << "  " << prog_name << " normal        # Run only Normal space experiments (Original & Sorted)\n"
-       << "  " << prog_name << " adversarial   # Run only Adversarial space experiments (Ladder of Pairs & Sorted)\n";
+       << "  " << prog_name << "                           # Run all experiments (Normal + Adversarial)\n"
+       << "  " << prog_name << " normal [iterations]       # Run Normal space experiments (Pre-Shuffled Store/Load, default 5)\n"
+       << "  " << prog_name << " adversarial [iterations]  # Run Adversarial space experiments\n";
 }
 
 int main(int argc, char* argv[]) {
   bool run_normal = true;
   bool run_adversarial = true;
+  int iterations = 5;
 
   if (argc > 1) {
     string mode = argv[1];
@@ -368,6 +375,10 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  if (argc > 2 && std::isdigit(argv[2][0])) {
+    iterations = std::max(1, std::stoi(argv[2]));
+  }
+
   // Initialize versioned CSV file in results/ folder
   init_csv_file();
 
@@ -378,11 +389,11 @@ int main(int argc, char* argv[]) {
   if (run_normal && run_adversarial) {
     cout << "Mode: ALL EXPERIMENTS (Normal: 50k->500k + Adversarial: 5k->25k across 2D, 3D, 5D, 7D)\n";
   } else if (run_normal) {
-    cout << "Mode: NORMAL SPACE ONLY (Original & Sorted: 50k -> 500k)\n";
+    cout << "Mode: NORMAL SPACE (Pre-Shuffled Store & Load vs. Original: 50k -> 500k)\n";
   } else {
     cout << "Mode: ADVERSARIAL SPACE ONLY (Ladder of Pairs & Sorted: 5k -> 25k)\n";
   }
-  cout << "Iterations per test: 10 runs\n";
+  cout << "Iterations per test: " << iterations << " runs\n";
   cout << "Logging results to:\n";
   cout << "  - Versioned run file : " << g_current_run_csv_filename << "\n";
   cout << "  - Primary aggregate  : experiment_results.csv\n";
@@ -392,10 +403,10 @@ int main(int argc, char* argv[]) {
   // PHASE 1: NORMAL SPACE EXPERIMENTS (50k -> 500k across 2D, 3D, 5D, 7D)
   // =========================================================================
   if (run_normal) {
-    run_all_normal_tests_for_dim<2>();
-    run_all_normal_tests_for_dim<3>();
-    run_all_normal_tests_for_dim<5>();
-    run_all_normal_tests_for_dim<7>();
+    run_all_normal_tests_for_dim<2>(iterations);
+    run_all_normal_tests_for_dim<3>(iterations);
+    run_all_normal_tests_for_dim<5>(iterations);
+    run_all_normal_tests_for_dim<7>(iterations);
   }
 
   // =========================================================================

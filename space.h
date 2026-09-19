@@ -256,6 +256,11 @@ template <std::size_t Dim, std::size_t Size = 0> struct Space {
               << "\n";
     if (type == "adversarial") {
       space = create_adversarial_space(count);
+    } else if (type == "uniform_shuffled") {
+      auto base_space = get_or_create("uniform", count, dir, seed);
+      space = base_space;
+      std::mt19937_64 g(seed + 999);
+      std::shuffle(space.points.begin(), space.points.end(), g);
     } else {
       space = create_uniform_space(count, 0.0f, 1000.0f, seed);
     }

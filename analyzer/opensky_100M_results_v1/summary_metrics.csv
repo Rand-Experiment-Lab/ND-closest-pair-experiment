@@ -1,0 +1,3 @@
+Algorithm,Input_Order,Mean_Time,StdDev_Time,Min_Time,Max_Time,Mean_Rebuilds
+Deterministic Grid,Original,1956.517069,2.578773,1956.517069,1956.517069,20.0
+Randomized Grid,Original,1957.852718,24.592813999999997,1957.852718,1957.852718,34.0

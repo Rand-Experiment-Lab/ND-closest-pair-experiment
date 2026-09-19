@@ -9,11 +9,32 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
-#include <random>
+#if __has_include(<ranges>)
 #include <ranges>
+#endif
+
+#if __has_include(<span>)
 #include <span>
-#include <unordered_map>
-#include <vector>
+#else
+namespace std {
+template <typename T>
+class span {
+  const T *ptr_{nullptr};
+  std::size_t size_{0};
+public:
+  constexpr span() noexcept = default;
+  constexpr span(const T *ptr, std::size_t count) noexcept : ptr_(ptr), size_(count) {}
+  template <typename Container>
+  constexpr span(const Container &c) noexcept : ptr_(c.data()), size_(c.size()) {}
+  [[nodiscard]] constexpr const T &operator[](std::size_t idx) const noexcept { return ptr_[idx]; }
+  [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
+  [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+  [[nodiscard]] constexpr const T *data() const noexcept { return ptr_; }
+  [[nodiscard]] constexpr const T *begin() const noexcept { return ptr_; }
+  [[nodiscard]] constexpr const T *end() const noexcept { return ptr_ + size_; }
+};
+}
+#endif
 
 #include "space.h"
 
