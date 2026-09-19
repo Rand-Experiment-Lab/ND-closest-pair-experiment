@@ -17,8 +17,11 @@ using namespace core;
 using namespace adapters::opensky;
 
 struct Config {
-  std::string suite = "all";
-  int iterations = 40;
+  std::string suite = "dim";
+  int iterations = 30;
+  int min_dim = 2;
+  int max_dim = 11;
+  std::size_t dim_n = 100000;
   std::string tag = "local";
   std::string opensky_dir = "storage/datasets/opensky";
   std::string output_dir = "storage/results/rebuild_work";
@@ -56,9 +59,10 @@ void evaluate_unit(const std::string &suite_name,
   auto det_res = find_closest_pair_deterministic<Dim, PointType, Filter>(
       std::span<const PointType>(points), filter);
   std::cout << "  > [Deterministic] " << std::fixed << std::setprecision(2)
-            << det_res.execution_time_ms << " ms | Rebuilds: " << det_res.rebuild_count
-            << " | Work: " << det_res.rebuild_work
-            << " | RebuildTime: " << det_res.rebuild_time_ms << " ms\n";
+            << det_res.execution_time_ms << " ms | Probe: " << det_res.probe_time_ms << " ms"
+            << " | RebuildTime: " << det_res.rebuild_time_ms << " ms"
+            << " | Rebuilds: " << det_res.rebuild_count
+            << " | Work: " << det_res.rebuild_work << " pts\n";
 
   std::vector<double> det_times = {det_res.execution_time_ms};
   std::vector<std::size_t> det_rebuilds = {det_res.rebuild_count};
@@ -66,6 +70,8 @@ void evaluate_unit(const std::string &suite_name,
                          ", \"raw_rebuild_works\": [" + std::to_string(det_res.rebuild_work) + "]" +
                          ", \"raw_rebuild_counts\": [" + std::to_string(det_res.rebuild_count) + "]" +
                          ", \"raw_rebuild_times_ms\": [" + std::to_string(det_res.rebuild_time_ms) + "]" +
+                         ", \"raw_probe_times_ms\": [" + std::to_string(det_res.probe_time_ms) + "]" +
+                         ", \"raw_total_neighbor_probes\": [" + std::to_string(det_res.total_neighbor_probes) + "]" +
                          ", \"raw_empty_probes\": [" + std::to_string(det_res.empty_cell_probes) + "]" +
                          ", \"raw_cell_hits\": [" + std::to_string(det_res.non_empty_cells_hit) + "]" +
                          ", \"raw_dist_evals\": [" + std::to_string(det_res.distance_evals) + "]" +
@@ -83,6 +89,8 @@ void evaluate_unit(const std::string &suite_name,
   std::vector<std::size_t> rand_rebuilds;
   std::vector<std::size_t> rand_rebuild_works;
   std::vector<double> rand_rebuild_times;
+  std::vector<double> rand_probe_times;
+  std::vector<std::size_t> rand_total_probes;
   std::vector<std::size_t> rand_cell_hits;
   std::vector<std::size_t> rand_dist_evals;
   std::vector<std::size_t> rand_peak_cells;
@@ -97,6 +105,8 @@ void evaluate_unit(const std::string &suite_name,
     rand_rebuilds.push_back(res.rebuild_count);
     rand_rebuild_works.push_back(res.rebuild_work);
     rand_rebuild_times.push_back(res.rebuild_time_ms);
+    rand_probe_times.push_back(res.probe_time_ms);
+    rand_total_probes.push_back(res.total_neighbor_probes);
     rand_cell_hits.push_back(res.non_empty_cells_hit);
     rand_dist_evals.push_back(res.distance_evals);
     rand_peak_cells.push_back(res.peak_occupied_cells);
@@ -105,32 +115,47 @@ void evaluate_unit(const std::string &suite_name,
     rand_total_pipeline_times.push_back(res.execution_time_ms + res.shuffle_time_ms);
     min_dist = res.min_distance;
 
-    if ((it + 1) % 10 == 0 || it == g_cfg.iterations - 1) {
+    if ((it + 1) % 5 == 0 || it == g_cfg.iterations - 1) {
+      double pct_r = (res.execution_time_ms > 0) ? (res.rebuild_time_ms / res.execution_time_ms) * 100.0 : 0.0;
+      double pct_p = (res.execution_time_ms > 0) ? (res.probe_time_ms / res.execution_time_ms) * 100.0 : 0.0;
       std::cout << "    [" << (it + 1) << "/" << g_cfg.iterations << "] "
-                << "Grid: " << std::fixed << std::setprecision(1) << res.execution_time_ms << " ms "
+                << "Total: " << std::fixed << std::setprecision(1) << res.execution_time_ms << " ms "
+                << "| Probe: " << res.probe_time_ms << " ms (" << std::setprecision(1) << pct_p << "%) "
+                << "| Rebuild: " << res.rebuild_time_ms << " ms (" << std::setprecision(1) << pct_r << "%) "
                 << "| Work: " << res.rebuild_work << " pts "
-                << "| Rebuilds: " << res.rebuild_count
-                << " | RebuildTime: " << res.rebuild_time_ms << " ms"
-                << " | Shuffle: " << res.shuffle_time_ms << " ms\n" << std::flush;
+                << "| Rebuilds: " << res.rebuild_count << "\n" << std::flush;
     }
   }
 
   SummaryStats time_stats = compute_stats(rand_times);
   double mean_work = std::accumulate(rand_rebuild_works.begin(), rand_rebuild_works.end(), 0.0) / g_cfg.iterations;
   double mean_rebuilds = std::accumulate(rand_rebuilds.begin(), rand_rebuilds.end(), 0.0) / g_cfg.iterations;
+  double mean_rebuild_time = std::accumulate(rand_rebuild_times.begin(), rand_rebuild_times.end(), 0.0) / g_cfg.iterations;
+  double mean_probe_time = std::accumulate(rand_probe_times.begin(), rand_probe_times.end(), 0.0) / g_cfg.iterations;
+  double pct_rebuild = (time_stats.mean > 0) ? (mean_rebuild_time / time_stats.mean) * 100.0 : 0.0;
+  double pct_probe = (time_stats.mean > 0) ? (mean_probe_time / time_stats.mean) * 100.0 : 0.0;
 
   std::cout << "  > [Randomized Mean] " << std::fixed << std::setprecision(2)
-            << time_stats.mean << " ± " << time_stats.std_dev << " ms | Mean Work: "
-            << std::setprecision(0) << mean_work << " pts | Mean Rebuilds: "
-            << std::setprecision(1) << mean_rebuilds << "\n";
+            << time_stats.mean << " ± " << time_stats.std_dev << " ms\n"
+            << "    ├─ Neighbor Probing : " << mean_probe_time << " ms (" << std::setprecision(1) << pct_probe << "% of runtime)"
+            << " | Total Probes: " << (rand_total_probes.empty() ? 0 : rand_total_probes[0]) << "\n"
+            << "    ├─ Grid Rebuilds    : " << mean_rebuild_time << " ms (" << std::setprecision(1) << pct_rebuild << "% of runtime)"
+            << " | Mean Work: " << std::setprecision(0) << mean_work << " pts\n"
+            << "    └─ Mean Rebuild Count: " << std::setprecision(1) << mean_rebuilds << "\n";
 
   std::string rand_meta = "{\"suite\": \"" + suite_name + "\"" +
                           ", \"platform\": \"" + g_cfg.tag + "\"" +
                           ", \"mean_rebuild_work\": " + std::to_string(mean_work) +
                           ", \"mean_rebuilds\": " + std::to_string(mean_rebuilds) +
+                          ", \"mean_rebuild_time_ms\": " + std::to_string(mean_rebuild_time) +
+                          ", \"mean_probe_time_ms\": " + std::to_string(mean_probe_time) +
+                          ", \"rebuild_time_pct\": " + std::to_string(pct_rebuild) +
+                          ", \"probe_time_pct\": " + std::to_string(pct_probe) +
                           ", \"raw_rebuild_works\": " + serialize_vec(rand_rebuild_works) +
                           ", \"raw_rebuild_counts\": " + serialize_vec(rand_rebuilds) +
                           ", \"raw_rebuild_times_ms\": " + serialize_vec(rand_rebuild_times) +
+                          ", \"raw_probe_times_ms\": " + serialize_vec(rand_probe_times) +
+                          ", \"raw_total_neighbor_probes\": " + serialize_vec(rand_total_probes) +
                           ", \"raw_empty_probes\": " + serialize_vec(rand_empty_probes) +
                           ", \"raw_cell_hits\": " + serialize_vec(rand_cell_hits) +
                           ", \"raw_dist_evals\": " + serialize_vec(rand_dist_evals) +
@@ -147,33 +172,72 @@ void evaluate_unit(const std::string &suite_name,
 }
 
 // -----------------------------------------------------------------------------
-// Suite 1: Dimension Variation (Holding N = 100,000 Constant)
+// Suite 1: Dimension Variation (Holding N Constant, D = min_dim .. max_dim)
 // -----------------------------------------------------------------------------
 void run_dimension_suite() {
   std::cout << "\n#################################################################\n";
-  std::cout << "  SUITE 1: CONTROLLED DIMENSION TEST (N = 100,000 CONSTANT)\n";
+  std::cout << "  SUITE 1: CONTROLLED DIMENSION TEST (N = " << g_cfg.dim_n
+            << " CONSTANT, D = " << g_cfg.min_dim << " .. " << g_cfg.max_dim << ")\n";
   std::cout << "#################################################################\n";
-  const std::size_t n = 100000;
+  const std::size_t n = g_cfg.dim_n;
 
-  // D = 2
-  {
-    auto space = Space<2>::get_or_create("uniform", n);
-    evaluate_unit<2>("DimensionSuite", "Synthetic_2D_100k", space.points);
-  }
-  // D = 3
-  {
-    auto space = Space<3>::get_or_create("uniform", n);
-    evaluate_unit<3>("DimensionSuite", "Synthetic_3D_100k", space.points);
-  }
-  // D = 4
-  {
-    auto space = Space<4>::get_or_create("uniform", n);
-    evaluate_unit<4>("DimensionSuite", "Synthetic_4D_100k", space.points);
-  }
-  // D = 7
-  {
-    auto space = Space<7>::get_or_create("uniform", n);
-    evaluate_unit<7>("DimensionSuite", "Synthetic_7D_100k", space.points);
+  for (int d = g_cfg.min_dim; d <= g_cfg.max_dim; ++d) {
+    std::string ds_name = "Synthetic_" + std::to_string(d) + "D_" + std::to_string(n / 1000) + "k";
+    switch (d) {
+      case 2: {
+        auto space = Space<2>::get_or_create("uniform", n);
+        evaluate_unit<2>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 3: {
+        auto space = Space<3>::get_or_create("uniform", n);
+        evaluate_unit<3>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 4: {
+        auto space = Space<4>::get_or_create("uniform", n);
+        evaluate_unit<4>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 5: {
+        auto space = Space<5>::get_or_create("uniform", n);
+        evaluate_unit<5>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 6: {
+        auto space = Space<6>::get_or_create("uniform", n);
+        evaluate_unit<6>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 7: {
+        auto space = Space<7>::get_or_create("uniform", n);
+        evaluate_unit<7>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 8: {
+        auto space = Space<8>::get_or_create("uniform", n);
+        evaluate_unit<8>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 9: {
+        auto space = Space<9>::get_or_create("uniform", n);
+        evaluate_unit<9>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 10: {
+        auto space = Space<10>::get_or_create("uniform", n);
+        evaluate_unit<10>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      case 11: {
+        auto space = Space<11>::get_or_create("uniform", n);
+        evaluate_unit<11>("DimensionSuite", ds_name, space.points);
+        break;
+      }
+      default:
+        std::cerr << "Unsupported dimension: " << d << " (valid range: 2..11)\n";
+        break;
+    }
   }
 }
 
@@ -240,6 +304,16 @@ int main(int argc, char *argv[]) {
       g_cfg.iterations = std::max(2, std::stoi(argv[++i]));
     } else if (arg == "--tag" && i + 1 < argc) {
       g_cfg.tag = argv[++i];
+    } else if (arg == "--min-dim" && i + 1 < argc) {
+      g_cfg.min_dim = std::max(2, std::stoi(argv[++i]));
+    } else if (arg == "--max-dim" && i + 1 < argc) {
+      g_cfg.max_dim = std::min(11, std::max(2, std::stoi(argv[++i])));
+    } else if (arg == "--dim" && i + 1 < argc) {
+      int d = std::min(11, std::max(2, std::stoi(argv[++i])));
+      g_cfg.min_dim = d;
+      g_cfg.max_dim = d;
+    } else if (arg == "--dim-n" && i + 1 < argc) {
+      g_cfg.dim_n = std::stoull(argv[++i]);
     } else if (arg == "--opensky-dir" && i + 1 < argc) {
       g_cfg.opensky_dir = argv[++i];
     } else if (arg == "--output-dir" && i + 1 < argc) {
@@ -253,9 +327,11 @@ int main(int argc, char *argv[]) {
   g_cfg.master_csv_path = g_cfg.output_dir + "/rebuild_work_" + g_cfg.tag + "_master.csv";
 
   std::cout << "=================================================================\n";
-  std::cout << "  REBUILD WORK INVARIANCE EXPERIMENT ENGINE\n";
+  std::cout << "  REBUILD WORK INVARIANCE & DIMENSIONAL TRANSITION ENGINE\n";
   std::cout << "  Platform Tag : " << g_cfg.tag << "\n";
   std::cout << "  Suite Target : " << g_cfg.suite << "\n";
+  std::cout << "  Dimensions   : D = " << g_cfg.min_dim << " .. " << g_cfg.max_dim << "\n";
+  std::cout << "  Dim Points N : " << g_cfg.dim_n << "\n";
   std::cout << "  Iterations   : " << g_cfg.iterations << " per unit\n";
   std::cout << "  Run CSV      : " << g_cfg.run_csv_path << "\n";
   std::cout << "  Master CSV   : " << g_cfg.master_csv_path << "\n";

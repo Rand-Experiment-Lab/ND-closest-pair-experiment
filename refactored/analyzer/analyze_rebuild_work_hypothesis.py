@@ -37,12 +37,18 @@ def parse_rebuild_benchmark_csv(csv_path):
         raw_works = meta.get('raw_rebuild_works', [])
         raw_counts = meta.get('raw_rebuild_counts', [])
         raw_rebuild_times = meta.get('raw_rebuild_times_ms', [0.0]*len(raw_times))
+        raw_probe_times = meta.get('raw_probe_times_ms', [0.0]*len(raw_times))
+        raw_probes = meta.get('raw_total_neighbor_probes', [0]*len(raw_times))
         raw_shuffles = meta.get('raw_shuffle_ms', [0.0]*len(raw_times))
         raw_empty_probes = meta.get('raw_empty_probes', [0]*len(raw_times))
         platform = meta.get('platform', 'Unknown')
 
         num_iters = len(raw_times)
         for it in range(num_iters):
+            t = raw_times[it]
+            reb_t = raw_rebuild_times[it] if it < len(raw_rebuild_times) else 0.0
+            prb_t = raw_probe_times[it] if it < len(raw_probe_times) else max(0.0, t - reb_t)
+            tot_p = raw_probes[it] if it < len(raw_probes) else (n_points * (3**dim))
             records.append({
                 'Platform': platform,
                 'Suite': suite,
@@ -50,10 +56,12 @@ def parse_rebuild_benchmark_csv(csv_path):
                 'Dim': dim,
                 'N': n_points,
                 'Iteration': it + 1,
-                'Time_ms': raw_times[it],
+                'Time_ms': t,
                 'Rebuild_Work': raw_works[it] if it < len(raw_works) else 0,
                 'Rebuild_Count': raw_counts[it] if it < len(raw_counts) else 0,
-                'Rebuild_Time_ms': raw_rebuild_times[it] if it < len(raw_rebuild_times) else 0.0,
+                'Rebuild_Time_ms': reb_t,
+                'Probe_Time_ms': prb_t,
+                'Total_Probes': tot_p,
                 'Shuffle_Time_ms': raw_shuffles[it] if it < len(raw_shuffles) else 0.0,
                 'Empty_Probes': raw_empty_probes[it] if it < len(raw_empty_probes) else 0
             })
@@ -72,6 +80,8 @@ def analyze_dataset_correlations(df):
         w = group['Rebuild_Work'].values
         t = group['Time_ms'].values
         c = group['Rebuild_Count'].values
+        prb_t = group['Probe_Time_ms'].values
+        reb_t = group['Rebuild_Time_ms'].values
 
         if np.std(w) > 0 and np.std(t) > 0:
             r_w = float(np.corrcoef(w, t)[0, 1])
@@ -85,15 +95,26 @@ def analyze_dataset_correlations(df):
         else:
             r_c, p_c = 0.0, 1.0
 
+        mean_t = group['Time_ms'].mean()
+        mean_reb_t = group['Rebuild_Time_ms'].mean()
+        mean_prb_t = group['Probe_Time_ms'].mean()
+        pct_reb = (mean_reb_t / mean_t * 100.0) if mean_t > 0 else 0.0
+        pct_prb = (mean_prb_t / mean_t * 100.0) if mean_t > 0 else 0.0
+
         results.append({
             'Suite': suite,
             'Dataset': dataset,
             'Dim': dim,
             'N': n,
             'Iterations': len(group),
-            'Mean_Time_ms': group['Time_ms'].mean(),
+            'Mean_Time_ms': mean_t,
             'Mean_Work': group['Rebuild_Work'].mean(),
             'Mean_Count': group['Rebuild_Count'].mean(),
+            'Mean_Rebuild_Time_ms': mean_reb_t,
+            'Mean_Probe_Time_ms': mean_prb_t,
+            'Rebuild_Time_Pct': pct_reb,
+            'Probe_Time_Pct': pct_prb,
+            'Total_Probes': group['Total_Probes'].iloc[0] if 'Total_Probes' in group else (n * (3**dim)),
             'r_Work': r_w,
             'R2_Work_Pct': (r_w ** 2) * 100.0,
             'p_Work': p_w,
@@ -147,6 +168,62 @@ def plot_hypothesis_verification(sum_df, output_dir, prefix="rebuild_work"):
     plt.savefig(plot2_path)
     plt.close()
     print(f"[Plot 2/2] Saved variance comparison bar chart: {plot2_path}")
+
+def plot_dimensional_phase_transition(sum_df, output_dir, prefix="rebuild_work"):
+    dim_df = sum_df[sum_df['Suite'] == 'DimensionSuite'].sort_values('Dim')
+    if len(dim_df) < 2:
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+    sns.set_theme(style="whitegrid", font="sans-serif")
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), dpi=300)
+
+    dims = dim_df['Dim'].values
+    r_w = dim_df['r_Work'].values
+    pct_prb = dim_df['Probe_Time_Pct'].values
+    pct_reb = dim_df['Rebuild_Time_Pct'].values
+
+    # Subplot 1: Bottleneck Transition (% Time in Probing vs Rebuilding)
+    ax1.plot(dims, pct_prb, marker='o', linewidth=2.5, markersize=8, color='#d32f2f', label='% Runtime in Neighbor Probing (3^D)')
+    ax1.plot(dims, pct_reb, marker='s', linewidth=2.5, markersize=8, color='#1976d2', label='% Runtime in Grid Rebuilds (W)')
+    ax1.axhline(50.0, color='gray', linestyle=':', alpha=0.7, label='50% Crossover Threshold')
+    ax1.set_xlabel('Spatial Dimensionality (D)', fontsize=11, fontweight='bold')
+    ax1.set_ylabel('Percentage of Total Execution Time (%)', fontsize=11, fontweight='bold')
+    ax1.set_title('Computational Bottleneck Shift Across Dimensions\nProbing Explodes (3^D), Rebuilds Become Irrelevant',
+                  fontsize=12, fontweight='bold', pad=10)
+    ax1.set_xticks(dims)
+    ax1.set_ylim(-2, 102)
+    ax1.legend(frameon=True, fontsize=10, loc='center left')
+
+    # Subplot 2: Correlation Collapse vs Total Probes
+    color1 = '#1976d2'
+    ax2.set_xlabel('Spatial Dimensionality (D)', fontsize=11, fontweight='bold')
+    ax2.set_ylabel('Pearson Correlation r(Rebuild Work, Time)', color=color1, fontsize=11, fontweight='bold')
+    line1 = ax2.plot(dims, r_w, marker='D', linewidth=2.5, markersize=8, color=color1, label='r(Rebuild Work, Time)')
+    ax2.tick_params(axis='y', labelcolor=color1)
+    ax2.set_ylim(-0.1, 1.05)
+    ax2.set_xticks(dims)
+
+    ax2_twin = ax2.twinx()
+    color2 = '#e65100'
+    total_probes = [3**int(d) * int(dim_df['N'].iloc[0]) for d in dims]
+    line2 = ax2_twin.plot(dims, total_probes, marker='^', linewidth=2.0, markersize=7, color=color2, linestyle='--', label='Neighbor Probes (N · 3^D)')
+    ax2_twin.set_ylabel('Total Probes Required (Log Scale)', color=color2, fontsize=11, fontweight='bold')
+    ax2_twin.set_yscale('log')
+    ax2_twin.tick_params(axis='y', labelcolor=color2)
+
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax2.legend(lines, labels, loc='lower left', frameon=True, fontsize=10)
+    ax2.set_title('Rebuild Correlation Collapse under Curse of Dimensionality\nVariance Moves from Rebuilds to Probing',
+                  fontsize=12, fontweight='bold', pad=10)
+
+    plt.tight_layout()
+    plot_path = os.path.join(output_dir, f"{prefix}_04_curse_of_dimensionality_phase_transition.png")
+    plt.savefig(plot_path)
+    plt.close()
+    print(f"[Plot Phase Transition] Saved phase transition plot: {plot_path}")
 
 def plot_cross_platform_comparison(local_df, server_df, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -214,15 +291,17 @@ def main():
     summary_csv1 = os.path.join(out_dir1, "rebuild_work_vs_count_summary.csv")
     summary_df1.to_csv(summary_csv1, index=False)
 
-    print("\n" + "="*95)
-    print("                REBUILD WORK INVARIANCE HYPOTHESIS: STATISTICAL VERIFICATION             ")
-    print("="*95)
-    cols = ['Suite', 'Dataset', 'Dim', 'N', 'r_Work', 'R2_Work_Pct', 'r_Count', 'R2_Count_Pct', 'Superior_Metric']
-    print(summary_df1[cols].to_string(index=False))
-    print("="*95)
+    print("\n" + "="*115)
+    print("                REBUILD WORK INVARIANCE HYPOTHESIS & BOTTLENECK ANALYSIS: STATISTICAL VERIFICATION             ")
+    print("="*115)
+    cols = ['Suite', 'Dataset', 'Dim', 'N', 'Mean_Time_ms', 'Probe_Time_Pct', 'Rebuild_Time_Pct', 'r_Work', 'R2_Work_Pct', 'r_Count', 'Superior_Metric']
+    avail = [c for c in cols if c in summary_df1.columns]
+    print(summary_df1[avail].to_string(index=False))
+    print("="*115)
     print(f"[Summary CSV] Saved to: {summary_csv1}")
 
     plot_hypothesis_verification(summary_df1, out_dir1)
+    plot_dimensional_phase_transition(summary_df1, out_dir1)
 
     if csv_path2:
         print(f"\n[Analyzer] Loading Second CSV for Cross-Platform Comparison: {csv_path2}")
@@ -233,4 +312,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

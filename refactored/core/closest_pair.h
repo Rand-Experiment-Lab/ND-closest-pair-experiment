@@ -31,8 +31,10 @@ struct ClosestPairResult {
   std::size_t distance_evals{0};      // Suspect 3: 4D Euclidean distance checks performed
   std::size_t peak_occupied_cells{0}; // Suspect 5: Peak distinct cells in hash table
   std::size_t empty_cell_probes{0};   // Suspect 7: Probes that encountered empty buckets
+  std::size_t total_neighbor_probes{0}; // Suspect 2 & 6: Total 3^Dim neighbor queries performed
   
   double rebuild_time_ms{0.0};        // Direct duration spent executing rebuild loops
+  double probe_time_ms{0.0};          // Direct duration spent querying neighbor cells and distance checks
   double shuffle_time_ms{0.0};        // Suspect 4: Randomization shuffle latency
   double execution_time_ms{0.0};
 };
@@ -181,6 +183,7 @@ find_closest_pair_grid(std::span<const PointType> points,
   }
 
   const std::size_t total_probes = (n > init_limit) ? (n - init_limit - 1) * neighbor_offsets.size() : 0;
+  result.total_neighbor_probes = total_probes;
   result.empty_cell_probes = (total_probes >= result.non_empty_cells_hit)
                                  ? (total_probes - result.non_empty_cells_hit)
                                  : 0;
@@ -216,6 +219,8 @@ find_closest_pair_deterministic(std::span<const PointType> points,
 
   result.execution_time_ms =
       std::chrono::duration<double, std::milli>(end - start).count();
+  result.probe_time_ms =
+      std::max(0.0, result.execution_time_ms - result.rebuild_time_ms);
   return result;
 }
 
@@ -261,6 +266,8 @@ find_closest_pair_randomized(std::vector<PointType> points_copy,
   result.shuffle_time_ms = shuffle_ms;
   result.execution_time_ms =
       std::chrono::duration<double, std::milli>(end - start).count();
+  result.probe_time_ms =
+      std::max(0.0, result.execution_time_ms - result.rebuild_time_ms);
   return result;
 }
 
