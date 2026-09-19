@@ -24,8 +24,14 @@ struct ClosestPairResult {
   PointType p1{};
   PointType p2{};
   std::size_t rebuild_count{0};
-  std::size_t rebuild_work{0}; // Sum of (i + 1) points re-inserted across all rebuilds
-  std::vector<std::size_t> rebuild_indices{}; // Exact insertion indices where rebuilds triggered
+  std::size_t rebuild_work{0}; // Suspect 1: Sum of (i + 1) points re-inserted
+  std::vector<std::size_t> rebuild_indices{}; // Exact insertion indices of rebuilds
+  
+  std::size_t non_empty_cells_hit{0}; // Suspect 2: Neighbor cell probes that found points
+  std::size_t distance_evals{0};      // Suspect 3: 4D Euclidean distance checks performed
+  std::size_t peak_occupied_cells{0}; // Suspect 5: Peak distinct cells in hash table
+  
+  double shuffle_time_ms{0.0};        // Suspect 4: Randomization shuffle latency
   double execution_time_ms{0.0};
 };
 
@@ -122,7 +128,9 @@ find_closest_pair_grid(std::span<const PointType> points,
 
       auto it = grid_map.find(neighbor_cell);
       if (it != grid_map.end()) {
+        result.non_empty_cells_hit++;
         for (const auto &pj : it->second) {
+          result.distance_evals++;
           if constexpr (!Filter::is_trivial) {
             if (!filter(pi, pj)) {
               continue;
@@ -148,6 +156,7 @@ find_closest_pair_grid(std::span<const PointType> points,
     }
 
     if (rebuild) {
+      result.peak_occupied_cells = std::max(result.peak_occupied_cells, grid_map.size());
       rebuild_count++;
       result.rebuild_indices.push_back(i);
       result.rebuild_work += (i + 1);
@@ -165,6 +174,7 @@ find_closest_pair_grid(std::span<const PointType> points,
     }
   }
 
+  result.peak_occupied_cells = std::max(result.peak_occupied_cells, grid_map.size());
   result.min_distance = delta;
   result.rebuild_count = rebuild_count;
   return result;
@@ -177,10 +187,22 @@ template <std::size_t Dim, typename PointType, typename Filter = DefaultPairFilt
 [[nodiscard]] ClosestPairResult<PointType>
 find_closest_pair_deterministic(std::span<const PointType> points,
                                 Filter filter = Filter{},
+                                TimePoint *out_start = nullptr,
+                                TimePoint *out_end = nullptr,
                                 bool verbose = false) {
   auto start = std::chrono::high_resolution_clock::now();
-  auto result = find_closest_pair_grid<Dim, PointType, Filter>(points, filter, verbose);
+  if (out_start) {
+    *out_start = start;
+  }
+
+  auto result =
+      find_closest_pair_grid<Dim, PointType, Filter>(points, filter, verbose);
+
   auto end = std::chrono::high_resolution_clock::now();
+  if (out_end) {
+    *out_end = end;
+  }
+
   result.execution_time_ms =
       std::chrono::duration<double, std::milli>(end - start).count();
   return result;
@@ -196,7 +218,7 @@ find_closest_pair_randomized(std::vector<PointType> points_copy,
                              TimePoint *out_start = nullptr,
                              TimePoint *out_end = nullptr,
                              bool verbose = false) {
-  // 1. Thread-safe random device and shuffle
+  // 1. Thread-safe random device and shuffle timing
   thread_local std::random_device rd;
   std::array<std::uint32_t, 8> seed_data{};
   for (auto &v : seed_data) {
@@ -204,7 +226,12 @@ find_closest_pair_randomized(std::vector<PointType> points_copy,
   }
   std::seed_seq seq(seed_data.begin(), seed_data.end());
   std::mt19937 g(seq);
+
+  auto t_shuffle_start = std::chrono::high_resolution_clock::now();
   std::shuffle(points_copy.begin(), points_copy.end(), g);
+  auto t_shuffle_end = std::chrono::high_resolution_clock::now();
+  double shuffle_ms =
+      std::chrono::duration<double, std::milli>(t_shuffle_end - t_shuffle_start).count();
 
   // 2. High resolution stopwatch strictly excluding copy & shuffle latency
   auto start = std::chrono::high_resolution_clock::now();
@@ -220,6 +247,7 @@ find_closest_pair_randomized(std::vector<PointType> points_copy,
     *out_end = end;
   }
 
+  result.shuffle_time_ms = shuffle_ms;
   result.execution_time_ms =
       std::chrono::duration<double, std::milli>(end - start).count();
   return result;
