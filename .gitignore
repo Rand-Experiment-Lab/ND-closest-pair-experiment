@@ -13,6 +13,9 @@ experiment_results.csv
 datasets/
 data/
 **/data/**
+results/
+build.sh
+*.csv
 .idea/
 CMakeFiles/
 **/CMakeFiles/**

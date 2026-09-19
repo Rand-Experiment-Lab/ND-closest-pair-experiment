@@ -190,8 +190,10 @@ int main(int argc, char *argv[]) {
        << out_dir << " ===\n\n";
 
   const vector<size_t> dims = {2, 3, 5, 7, 9};
-  const vector<size_t> uniform_sizes = {100000, 200000, 300000, 400000, 500000,
-                                       600000, 700000, 800000, 900000, 1000000};
+  vector<size_t> uniform_sizes;
+  for (size_t n = 100'000; n <= 1'000'000; n += 100'000) {
+    uniform_sizes.push_back(n);
+  }
   const vector<size_t> adversarial_sizes = {10000, 20000, 30000, 40000, 50000};
 
   uint64_t seed = 42;
