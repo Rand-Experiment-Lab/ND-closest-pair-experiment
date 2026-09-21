@@ -55,6 +55,7 @@ The project uses a clean modular structure at the repository root:
 │   │   ├── opensky/                    # Preprocessed 4D OpenSky binary datasets (*.bin)
 │   │   └── synthetic/                  # Pre-generated / cached synthetic binary datasets (*.bin)
 │   └── results/                        # Output CSV benchmark logs
+├── docs/                               # Research reports, developer docs, and guides
 └── legacy/                             # Archived exploratory scripts and historical experiments
 ```
 

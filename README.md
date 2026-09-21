@@ -2,14 +2,13 @@
 
 This directory contains the cleanly refactored, production-ready implementation of the N-Dimensional Closest Pair engine, unifying synthetic multi-dimensional benchmarks and real-world 4D OpenSky flight collision detection under a zero-overhead generic core.
 
-For a comprehensive walkthrough of experiment reproduction and hypothesis validation, see [**GUIDE.md**](file:///media/vithurshan/vithu/rand/refactored/GUIDE.md).
+For a comprehensive walkthrough of experiment reproduction and hypothesis validation, see [**docs/GUIDE.md**](docs/GUIDE.md).
 
 ---
 
 ## Directory Structure
 
 ```
-refactored/
 ├── core/                               # Generic C++20 Header-Only Algorithmic Engine
 │   ├── point.h                         # Point<Dim, Payload = EmptyPayload> with [[no_unique_address]] (0 overhead)
 │   ├── hash_grid.h                     # GridCell<Dim>, ArrayHasher, 3^D neighbor offsets generator
@@ -22,14 +21,10 @@ refactored/
 │       └── opensky_adapter.h           # WGS-84 to ECEF + α·Δt metric coordinate transform & OPS2 loader
 │
 ├── experiments/                        # Benchmark Executables & Drivers
-│   ├── synthetic/
-│   │   └── benchmark_synthetic.cpp     # 2D to 9D Uniform, Sorted, and Adversarial benchmark suite
-│   ├── opensky/
-│   │   └── benchmark_opensky.cpp       # 4D OpenSky flight collision detection with Strategy 2 filter
-│   ├── rebuild_work/
-│   │   └── benchmark_rebuild_work.cpp  # D=2..11 Fixed vs Variable cost deconstruction & invariance engine
-│   └── cache/
-│       └── benchmark_cache.cpp         # Hardware cache locality and memory layout benchmark
+│   ├── synthetic/                      # benchmark_synthetic.cpp (D=2..9, Uniform & Adversarial)
+│   ├── opensky/                        # benchmark_opensky.cpp (4D real-world ADS-B telemetry)
+│   ├── rebuild_work/                   # benchmark_rebuild_work.cpp (D=2..11 Fixed vs Variable deconstruction)
+│   └── cache/                          # benchmark_cache.cpp (Hardware cache locality & memory layout)
 │
 ├── storage/                            # Centralized Storage & Results
 │   ├── results/
@@ -43,9 +38,15 @@ refactored/
 │   ├── analyze_rebuild_work_hypothesis.py # Rebuild Work Invariance & 2/3^D Ratio Law analyzer
 │   └── run_analyzer.py                 # Universal ingestor generating heatmaps, exponents & scaling plots
 │
+├── docs/                               # Research Documentation & Guides
+│   ├── GUIDE.md                        # Step-by-step reproduction and setup guide
+│   ├── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Theoretical and empirical research report
+│   ├── DEVELOPER_DOCS.md               # Architecture and engineering reference
+│   ├── HEAVY_LOADERS_AND_CORRELATION_EXPLAINED.md # Microarchitectural bottleneck breakdown
+│   └── REBUILD_WORK_ANALYSIS.md        # Variance decomposition analysis
+│
 ├── legacy/                             # Archived exploratory scripts and historical experiments
-├── GUIDE.md                            # Comprehensive step-by-step reproduction and setup guide
-└── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Complete research report on randomization & dimensional law
+└── CMakeLists.txt                      # Root build configuration
 ```
 
 ---
