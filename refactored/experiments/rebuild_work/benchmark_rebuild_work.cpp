@@ -265,17 +265,32 @@ void run_real_suite() {
   std::cout << "#################################################################\n";
 
   std::vector<std::string> files;
-  if (std::filesystem::exists(g_cfg.opensky_dir)) {
-    for (const auto &entry : std::filesystem::directory_iterator(g_cfg.opensky_dir)) {
-      if (entry.path().extension() == ".bin") {
-        files.push_back(entry.path().string());
+  std::vector<std::string> candidate_dirs = {
+      g_cfg.opensky_dir,
+      "../" + g_cfg.opensky_dir,
+      "../../" + g_cfg.opensky_dir,
+      "refactored/" + g_cfg.opensky_dir,
+      "opensky_experiment/data/2019-05-27_hourly",
+      "../opensky_experiment/data/2019-05-27_hourly"
+  };
+
+  for (const auto &cand : candidate_dirs) {
+    if (std::filesystem::exists(cand)) {
+      for (const auto &entry : std::filesystem::directory_iterator(cand)) {
+        if (entry.path().extension() == ".bin") {
+          files.push_back(entry.path().string());
+        }
+      }
+      if (!files.empty()) {
+        std::cout << "[OpenSky] Located dataset directory: " << cand << "\n";
+        break;
       }
     }
   }
   std::sort(files.begin(), files.end());
 
   if (files.empty()) {
-    std::cerr << "Warning: No OpenSky .bin datasets found in " << g_cfg.opensky_dir << "\n";
+    std::cerr << "Warning: No OpenSky .bin datasets found in " << g_cfg.opensky_dir << " or fallback paths.\n";
     return;
   }
 

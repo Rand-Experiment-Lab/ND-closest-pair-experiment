@@ -2,9 +2,11 @@
 
 This directory contains the cleanly refactored, production-ready implementation of the N-Dimensional Closest Pair engine, unifying synthetic multi-dimensional benchmarks and real-world 4D OpenSky flight collision detection under a zero-overhead generic core.
 
+For a comprehensive walkthrough of experiment reproduction and hypothesis validation, see [**GUIDE.md**](file:///media/vithurshan/vithu/rand/refactored/GUIDE.md).
+
 ---
 
-## Structure
+## Directory Structure
 
 ```
 refactored/
@@ -24,6 +26,8 @@ refactored/
 │   │   └── benchmark_synthetic.cpp     # 2D to 9D Uniform, Sorted, and Adversarial benchmark suite
 │   ├── opensky/
 │   │   └── benchmark_opensky.cpp       # 4D OpenSky flight collision detection with Strategy 2 filter
+│   ├── rebuild_work/
+│   │   └── benchmark_rebuild_work.cpp  # D=2..11 Fixed vs Variable cost deconstruction & invariance engine
 │   └── cache/
 │       └── benchmark_cache.cpp         # Hardware cache locality and memory layout benchmark
 │
@@ -31,17 +35,21 @@ refactored/
 │   ├── results/
 │   │   ├── synthetic/                  # Standardized synthetic benchmark CSVs & master log
 │   │   ├── opensky/                    # Standardized OpenSky telemetry benchmark CSVs
+│   │   ├── rebuild_work/               # Microarchitectural Fixed vs Variable deconstruction CSVs
 │   │   └── cache/                      # Cache miss and memory access profiling CSVs
-│   ├── datasets/                       # Serialized binary datasets (.bin, git-ignored)
-│   └── archive_legacy/                 # Preserved historical experiment CSVs
+│   └── datasets/                       # Serialized binary datasets (.bin, git-ignored)
 │
-└── analyzer/                           # Academic-Grade Visualization & Analysis Pipeline
-    └── run_analyzer.py                 # Universal ingestor generating heatmaps, exponents & scaling plots
+├── analyzer/                           # Academic-Grade Visualization & Analysis Pipeline
+│   ├── analyze_rebuild_work_hypothesis.py # Rebuild Work Invariance & 2/3^D Ratio Law analyzer
+│   └── run_analyzer.py                 # Universal ingestor generating heatmaps, exponents & scaling plots
+│
+├── GUIDE.md                            # Comprehensive step-by-step reproduction and setup guide
+└── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Complete research report on randomization & dimensional law
 ```
 
 ---
 
-## Build & Usage
+## Quick Build & Execution
 
 ### 1. Build
 ```bash
@@ -51,27 +59,20 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 ```
 
-### 2. Run Synthetic Benchmarks
+### 2. Run Benchmarks
 ```bash
-# Quick sanity check across 2D-9D (2,000 points)
-./bin_synthetic --quick
-
-# Full multi-scale benchmark (10k, 50k, 100k points)
+# Synthetic Suite (Uniform, Sorted, Adversarial)
 ./bin_synthetic --iterations 5
+
+# Real-World OpenSky 4D Telemetry Suite
+./bin_opensky --iterations 5
+
+# Rebuild Work Invariance & Dimensional Scaling Suite (D=2..11)
+./bin_rebuild_work --suite dim --min-dim 2 --max-dim 11 --iterations 10
 ```
 
-### 3. Run OpenSky 4D Telemetry Benchmarks
+### 3. Run Analysis & Generate Figures
 ```bash
-./bin_opensky --iterations 5 --min-sep 0.05
-```
-
-### 4. Run Cache Benchmark
-```bash
-./bin_cache 100000 5
-```
-
-### 5. Run Unified Analyzer
-```bash
-# Analyze synthetic results
-python3 ../analyzer/run_analyzer.py storage/results/synthetic/master_synthetic.csv --output-dir storage/results/synthetic/analysis
+cd /media/vithurshan/vithu/rand/refactored
+python3 analyzer/analyze_rebuild_work_hypothesis.py storage/results/rebuild_work/rebuild_work_local_master.csv --output-dir storage/results/rebuild_work/analysis
 ```

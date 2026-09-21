@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <execution>
 #include <filesystem>
 #include <fstream>
@@ -174,10 +175,20 @@ struct Space {
     std::ifstream in(filepath, std::ios::binary);
     if (!in) return false;
 
+    std::uint32_t first_header = 0;
+    in.read(reinterpret_cast<char *>(&first_header), sizeof(first_header));
+
     std::uint32_t dim_val = 0;
     std::uint64_t count_val = 0;
-    in.read(reinterpret_cast<char *>(&dim_val), sizeof(dim_val));
-    in.read(reinterpret_cast<char *>(&count_val), sizeof(count_val));
+
+    // Check for legacy 'NDPT' magic header (0x5450444E)
+    if (first_header == 0x5450444EU || std::memcmp(&first_header, "NDPT", 4) == 0) {
+      in.read(reinterpret_cast<char *>(&dim_val), sizeof(dim_val));
+      in.read(reinterpret_cast<char *>(&count_val), sizeof(count_val));
+    } else {
+      dim_val = first_header;
+      in.read(reinterpret_cast<char *>(&count_val), sizeof(count_val));
+    }
 
     if (dim_val != Dim) {
       std::cerr << "[SpaceIO] Dimension mismatch: file has " << dim_val
@@ -195,21 +206,24 @@ struct Space {
   get_or_create(const std::string &type, std::size_t count,
                 const std::string &dir = "storage/datasets/synthetic",
                 unsigned int seed = 42) {
-    std::string filename =
-        dir + "/" + type + "_d" + std::to_string(Dim) + "_n" + std::to_string(count) + ".bin";
-
-    // Legacy fallback check if file already exists in datasets/
-    std::string legacy_filename =
-        "datasets/" + type + "_d" + std::to_string(Dim) + "_n" + std::to_string(count) + ".bin";
+    std::string base_file = type + "_d" + std::to_string(Dim) + "_n" + std::to_string(count) + ".bin";
+    std::vector<std::string> search_candidates = {
+        dir + "/" + base_file,
+        "../" + dir + "/" + base_file,
+        "../../" + dir + "/" + base_file,
+        "refactored/" + dir + "/" + base_file,
+        "datasets/" + base_file,
+        "../datasets/" + base_file,
+        "../../datasets/" + base_file,
+        "refactored/storage/datasets/synthetic/" + base_file
+    };
 
     Space<Dim, Payload> space;
-    if (std::filesystem::exists(filename)) {
-      if (space.load_from_binary(filename)) {
-        return space;
-      }
-    } else if (std::filesystem::exists(legacy_filename)) {
-      if (space.load_from_binary(legacy_filename)) {
-        return space;
+    for (const auto &cand : search_candidates) {
+      if (std::filesystem::exists(cand)) {
+        if (space.load_from_binary(cand)) {
+          return space;
+        }
       }
     }
 
@@ -224,7 +238,8 @@ struct Space {
       space = create_uniform_space(count, 0.0f, 1000.0f, seed);
     }
 
-    space.save_to_binary(filename);
+    std::string save_path = dir + "/" + base_file;
+    space.save_to_binary(save_path);
     return space;
   }
 };
