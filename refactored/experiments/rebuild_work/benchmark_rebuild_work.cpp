@@ -336,6 +336,9 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (g_cfg.output_dir == "storage/results/rebuild_work" && !std::filesystem::exists("storage") && std::filesystem::exists("../storage")) {
+    g_cfg.output_dir = "../storage/results/rebuild_work";
+  }
   std::filesystem::create_directories(g_cfg.output_dir);
   std::string ts = get_timestamp_file_tag();
   g_cfg.run_csv_path = g_cfg.output_dir + "/rebuild_work_" + g_cfg.tag + "_" + g_cfg.suite + "_" + ts + ".csv";

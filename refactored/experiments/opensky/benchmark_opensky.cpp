@@ -13,8 +13,9 @@ using namespace adapters::opensky;
 
 int main(int argc, char *argv[]) {
   std::string tag = get_timestamp_file_tag();
-  std::string run_csv_path = "storage/results/opensky/opensky_benchmark_" + tag + ".csv";
-  std::string master_csv_path = "storage/results/opensky/master_opensky.csv";
+  std::string prefix = (!std::filesystem::exists("storage") && std::filesystem::exists("../storage")) ? "../" : "";
+  std::string run_csv_path = prefix + "storage/results/opensky/opensky_benchmark_" + tag + ".csv";
+  std::string master_csv_path = prefix + "storage/results/opensky/master_opensky.csv";
 
   std::string input_path = "";
   int iterations = 5;

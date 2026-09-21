@@ -14,7 +14,8 @@ using namespace core;
 
 int main(int argc, char *argv[]) {
   std::string tag = get_timestamp_file_tag();
-  std::string run_csv_path = "storage/results/cache/cache_benchmark_" + tag + ".csv";
+  std::string prefix = (!std::filesystem::exists("storage") && std::filesystem::exists("../storage")) ? "../" : "";
+  std::string run_csv_path = prefix + "storage/results/cache/cache_benchmark_" + tag + ".csv";
 
   std::size_t num_points = 100000;
   int iterations = 5;

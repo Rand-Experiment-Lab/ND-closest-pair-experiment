@@ -171,7 +171,9 @@ void run_all_tests_for_dim(const std::vector<std::size_t> &point_counts) {
 
 int main(int argc, char *argv[]) {
   std::string tag = get_timestamp_file_tag();
-  g_config.run_csv_path = "storage/results/synthetic/synthetic_benchmark_" + tag + ".csv";
+  std::string prefix = (!std::filesystem::exists("storage") && std::filesystem::exists("../storage")) ? "../" : "";
+  g_config.master_csv_path = prefix + "storage/results/synthetic/master_synthetic.csv";
+  g_config.run_csv_path = prefix + "storage/results/synthetic/synthetic_benchmark_" + tag + ".csv";
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
