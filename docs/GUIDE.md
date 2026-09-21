@@ -61,7 +61,8 @@ The project uses a clean modular structure at the repository root:
 
 ### Dataset Availability
 - **Synthetic Datasets**: If not already present, `Space<Dim>::get_or_create()` will **automatically generate** uniform and adversarial spaces on-the-fly and cache them to disk.
-- **Real-World OpenSky Datasets**: Place the 5 hourly preprocessed `.bin` files (`states_2019-05-27-00_4d.bin` through `04_4d.bin`) into `storage/datasets/opensky/`. The loader automatically detects fallback search locations.
+- **Real-World OpenSky Datasets**: Place the 5 hourly preprocessed `.bin` files (`states_2019-05-27-00_4d.bin` through `04_4d.bin`) into `storage/datasets/opensky/`.
+- **133M Massive Real-World Telemetry**: `opensky_3days_100M_4d.bin` (2.5 GB, 133,484,198 4D Cartesian points across 3 consecutive days of European airspace) is provided in `storage/datasets/opensky/`. The chunked streaming loader handles it automatically without excessive transient memory overhead.
 
 ---
 
@@ -77,7 +78,7 @@ make -j$(nproc)
 
 This will produce four optimized executables in `build/`:
 1. `bin_synthetic`: Baseline synthetic multi-scale benchmarks ($D=2 \dots 9$, Uniform, Sorted, Ladder of Pairs).
-2. `bin_opensky`: Real-world 4D flight collision detection benchmarks.
+2. `bin_opensky`: Real-world 4D flight collision detection benchmarks (supports hourly and 133M datasets).
 3. `bin_rebuild_work`: Algorithmic cost deconstruction, $W$ vs $R$ invariance, and dimensional scaling ($D=2 \dots 11$).
 4. `bin_cache`: Cache hierarchy and memory access profiling.
 
@@ -108,6 +109,7 @@ Runs standard uniform distributions, spatial sorting, and adversarial stress tes
 ### Experiment B: Real-World OpenSky Telemetry Benchmark
 Runs 4D spatiotemporal collision detection on commercial aircraft trajectories ($x, y, z, \alpha \cdot \Delta t$) with Strategy 2 flight trajectory pruning.
 
+#### 1. Standard Hourly Telemetry Run (1.1M to 1.3M points per file)
 ```bash
 # Run with default settings (5 iterations per hourly dataset)
 ./bin_opensky --iterations 5
@@ -116,7 +118,22 @@ Runs 4D spatiotemporal collision detection on commercial aircraft trajectories (
 ./bin_opensky --iterations 5 --min-sep 0.05
 ```
 - Demonstrates runtime parity between deterministic and randomized orders on real-world benign flight coordinates.
+- Note: The directory scanner automatically skips files $>500$ MB in default batch mode to protect developer machines from unintended out-of-memory errors.
 - Output: Appends to `storage/results/opensky/master_opensky.csv`.
+
+#### 2. Massive 133M Telemetry Experiment (`opensky_3days_100M_4d.bin`)
+The 133M dataset contains 133,484,198 points ($N \approx 1.33 \times 10^8$).
+
+```bash
+# A. Scaled run on standard workstations / laptops (<= 16 GB RAM)
+# Loads first 5M or 10M points using the streaming cap:
+./bin_opensky --input storage/datasets/opensky/opensky_3days_100M_4d.bin --max-points 5000000 --iterations 1
+./bin_opensky --input storage/datasets/opensky/opensky_3days_100M_4d.bin --max-points 10000000 --iterations 1
+
+# B. Full 133.5M point run on dedicated high-memory server (>= 32 GB RAM required)
+./bin_opensky --input storage/datasets/opensky/opensky_3days_100M_4d.bin --iterations 1
+```
+*Memory Note:* The 133.5M point array requires ~3.2 GB RAM, and the closest-pair hash table working set requires ~11.2 GB RAM (peak RSS ~14.4 GB). When benchmarking on machines with $\le 16$ GB RAM, use `--max-points 5000000` or `--max-points 10000000` to avoid OS swapping.
 
 ---
 

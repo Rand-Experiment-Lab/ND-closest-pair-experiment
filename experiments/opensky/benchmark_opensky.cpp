@@ -20,6 +20,8 @@ int main(int argc, char *argv[]) {
   std::string input_path = "";
   int iterations = 5;
   float min_separation = 0.05f;
+  std::size_t max_points = 0;
+  bool run_large = false;
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -29,6 +31,10 @@ int main(int argc, char *argv[]) {
       iterations = std::max(1, std::stoi(argv[++i]));
     } else if (arg == "--min-sep" && i + 1 < argc) {
       min_separation = std::stof(argv[++i]);
+    } else if (arg == "--max-points" && i + 1 < argc) {
+      max_points = std::stoull(argv[++i]);
+    } else if (arg == "--all" || arg == "--run-large" || arg == "--run-100m") {
+      run_large = true;
     }
   }
 
@@ -36,6 +42,9 @@ int main(int argc, char *argv[]) {
   std::cout << "  ND Closest Pair: Unified OpenSky 4D Real Data Benchmark Engine\n";
   std::cout << "  Logging to: " << run_csv_path << "\n";
   std::cout << "  Iterations: " << iterations << "\n";
+  if (max_points > 0) {
+    std::cout << "  Max Points Cap: " << max_points << "\n";
+  }
   std::cout << "=================================================================\n";
 
   // Scan OpenSky dataset directories or handle input_path
@@ -44,6 +53,14 @@ int main(int argc, char *argv[]) {
     if (std::filesystem::is_directory(input_path)) {
       for (const auto &entry : std::filesystem::directory_iterator(input_path)) {
         if (entry.path().extension() == ".bin") {
+          std::error_code ec;
+          auto fsize = std::filesystem::file_size(entry.path(), ec);
+          if (!run_large && fsize > 500ULL * 1024 * 1024) {
+            std::cout << "[OpenSky Benchmark] Skipping large dataset (>500MB): "
+                      << entry.path().filename().string()
+                      << " (pass --input <file> or --run-large to execute)\n";
+            continue;
+          }
           dataset_files.push_back(entry.path().string());
         }
       }
@@ -70,6 +87,14 @@ int main(int argc, char *argv[]) {
       if (std::filesystem::exists(cand)) {
         for (const auto &entry : std::filesystem::directory_iterator(cand)) {
           if (entry.path().extension() == ".bin") {
+            std::error_code ec;
+            auto fsize = std::filesystem::file_size(entry.path(), ec);
+            if (!run_large && fsize > 500ULL * 1024 * 1024) {
+              std::cout << "[OpenSky Benchmark] Skipping large dataset (>500MB): "
+                        << entry.path().filename().string()
+                        << " (pass --input <file> or --run-large to execute)\n";
+              continue;
+            }
             dataset_files.push_back(entry.path().string());
           }
         }
@@ -94,7 +119,7 @@ int main(int argc, char *argv[]) {
     float alpha = 0.0f;
     double t_min = 0.0;
 
-    if (!OpenSkyAdapter::load_binary_dataset(filepath, points, &alpha, &t_min)) {
+    if (!OpenSkyAdapter::load_binary_dataset(filepath, points, &alpha, &t_min, max_points)) {
       continue;
     }
 

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -79,11 +81,12 @@ public:
     return pt;
   }
 
-  // Fast binary loader reading preprocessed OpenSky .bin files (supports OPS2 and OPSK formats)
+  // Fast binary loader reading preprocessed OpenSky .bin files (supports OPS2 and OPSK formats, auto-detecting layout)
   static bool load_binary_dataset(const std::string &filepath,
                                   std::vector<FlightPoint4D> &points,
                                   float *out_alpha = nullptr,
-                                  double *out_t_min = nullptr) {
+                                  double *out_t_min = nullptr,
+                                  std::size_t max_points = 0) {
     std::ifstream in(filepath, std::ios::binary);
     if (!in.is_open()) {
       std::cerr << "[OpenSkyAdapter] Cannot open file: " << filepath << "\n";
@@ -121,32 +124,87 @@ public:
       return false;
     }
 
-    points.resize(count);
-
-#pragma pack(push, 1)
-    struct BinaryRecord {
-      std::uint32_t id;
-      float coords[4];
-    };
-#pragma pack(pop)
-
-    std::vector<BinaryRecord> buffer(count);
-    in.read(reinterpret_cast<char *>(buffer.data()), count * sizeof(BinaryRecord));
-    if (!in.good()) {
-      std::cerr << "[OpenSkyAdapter] Error reading payload from " << filepath << "\n";
+    // Auto-detect layout from first 20-byte record:
+    // Layout A (Hourly): flight_id (4B), x (4B), y (4B), z (4B), w (4B)
+    // Layout B (100M/133M): x (4B), y (4B), z (4B), w (4B), flight_id (4B)
+    std::array<char, 20> sample_raw{};
+    in.read(sample_raw.data(), 20);
+    if (!in) {
+      std::cerr << "[OpenSkyAdapter] Error reading first record from " << filepath << "\n";
       return false;
     }
 
-    for (std::size_t i = 0; i < count; ++i) {
-      points[i].payload.flight_id = buffer[i].id;
-      points[i].payload.epoch_utc = t_min + (static_cast<double>(buffer[i].coords[3]) / alpha);
-      for (std::size_t d = 0; d < 4; ++d) {
-        points[i].coords[d] = buffer[i].coords[d];
-      }
+    std::uint32_t u_first = 0;
+    std::uint32_t u_last = 0;
+    std::memcpy(&u_first, sample_raw.data(), 4);
+    std::memcpy(&u_last, sample_raw.data() + 16, 4);
+
+    bool id_first = true;
+    if (u_first > 0x00FFFFFF && u_last <= 0x00FFFFFF) {
+      id_first = false; // coords first (x, y, z, w, id)
     }
 
-    std::cout << "[OpenSkyAdapter] Loaded " << count << " points from " << filepath
-              << " (alpha: " << alpha << " m/s, t_min: " << t_min << " s)\n";
+    // Seek back to start of records (offset 28)
+    in.seekg(28, std::ios::beg);
+
+    std::size_t num_to_load = count;
+    if (max_points > 0 && max_points < count) {
+      num_to_load = max_points;
+      std::cout << "[OpenSkyAdapter] Capping point loading to " << num_to_load
+                << " of " << count << " points (via max_points limit)\n";
+    }
+
+    try {
+      points.resize(num_to_load);
+    } catch (const std::bad_alloc &e) {
+      std::cerr << "[OpenSkyAdapter] Out of memory allocating " << num_to_load
+                << " points (" << (num_to_load * sizeof(FlightPoint4D)) / (1024 * 1024)
+                << " MB): " << e.what() << "\n";
+      return false;
+    }
+
+    constexpr std::size_t CHUNK_SIZE = 1000000;
+    std::vector<char> raw_chunk(CHUNK_SIZE * 20);
+    std::size_t loaded = 0;
+
+    while (loaded < num_to_load) {
+      std::size_t batch = std::min(CHUNK_SIZE, num_to_load - loaded);
+      in.read(raw_chunk.data(), static_cast<std::streamsize>(batch * 20));
+      if (!in && !in.eof()) {
+        std::cerr << "[OpenSkyAdapter] Error reading chunk at " << loaded << "\n";
+        return false;
+      }
+
+      for (std::size_t b = 0; b < batch; ++b) {
+        std::size_t idx = loaded + b;
+        const char *rec = raw_chunk.data() + b * 20;
+
+        if (id_first) {
+          std::uint32_t flight_id = 0;
+          std::memcpy(&flight_id, rec, 4);
+          points[idx].payload.flight_id = flight_id;
+
+          float w_coord = 0.0f;
+          std::memcpy(&w_coord, rec + 16, 4);
+          points[idx].payload.epoch_utc = t_min + (static_cast<double>(w_coord) / alpha);
+          std::memcpy(points[idx].coords.data(), rec + 4, 16);
+        } else {
+          std::uint32_t flight_id = 0;
+          std::memcpy(&flight_id, rec + 16, 4);
+          points[idx].payload.flight_id = flight_id;
+
+          float w_coord = 0.0f;
+          std::memcpy(&w_coord, rec + 12, 4);
+          points[idx].payload.epoch_utc = t_min + (static_cast<double>(w_coord) / alpha);
+          std::memcpy(points[idx].coords.data(), rec, 16);
+        }
+      }
+      loaded += batch;
+    }
+
+    std::cout << "[OpenSkyAdapter] Loaded " << num_to_load << " points from " << filepath
+              << " (format: " << (id_first ? "ID-first" : "Coords-first")
+              << ", alpha: " << alpha << " m/s, t_min: " << std::fixed << t_min << " s)\n";
     return true;
   }
 };
