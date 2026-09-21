@@ -57,7 +57,12 @@ int main(int argc, char *argv[]) {
   } else {
     std::vector<std::string> candidates = {
         "storage/datasets/opensky",
+        "../storage/datasets/opensky",
+        "../../storage/datasets/opensky",
         "opensky_experiment/data/2019-05-27_hourly",
+        "../opensky_experiment/data/2019-05-27_hourly",
+        "legacy/opensky_experiment/data/2019-05-27_hourly",
+        "../legacy/opensky_experiment/data/2019-05-27_hourly",
         "opensky_100m/data",
         "cache_benchmark"};
 

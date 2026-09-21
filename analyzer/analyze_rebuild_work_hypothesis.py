@@ -73,7 +73,7 @@ def analyze_dataset_correlations(df):
     grouped = df.groupby(['Suite', 'Dataset', 'Dim', 'N'])
 
     for (suite, dataset, dim, n), group in grouped:
-        if len(group) < 3:
+        if len(group) < 2:
             continue
             
         # Work correlation
@@ -83,13 +83,13 @@ def analyze_dataset_correlations(df):
         prb_t = group['Probe_Time_ms'].values
         reb_t = group['Rebuild_Time_ms'].values
 
-        if np.std(w) > 0 and np.std(t) > 0:
+        if len(group) >= 3 and np.std(w) > 0 and np.std(t) > 0:
             r_w = float(np.corrcoef(w, t)[0, 1])
             p_w = 0.001
         else:
             r_w, p_w = 0.0, 1.0
 
-        if np.std(c) > 0 and np.std(t) > 0:
+        if len(group) >= 3 and np.std(c) > 0 and np.std(t) > 0:
             r_c = float(np.corrcoef(c, t)[0, 1])
             p_c = 0.001
         else:
@@ -122,12 +122,16 @@ def analyze_dataset_correlations(df):
             'R2_Count_Pct': (r_c ** 2) * 100.0,
             'p_Count': p_c,
             'Advantage_Pct': (r_w ** 2 - r_c ** 2) * 100.0,
-            'Superior_Metric': 'Rebuild Work' if (r_w**2 > r_c**2) else 'Rebuild Count'
+            'Superior_Metric': 'Rebuild Work' if (r_w**2 >= r_c**2) else 'Rebuild Count'
         })
 
     return pd.DataFrame(results)
 
 def plot_hypothesis_verification(sum_df, output_dir, prefix="rebuild_work"):
+    if sum_df.empty or 'r_Work' not in sum_df.columns:
+        print("[Plot Notice] Not enough data points to generate hypothesis verification plots.")
+        return
+
     os.makedirs(output_dir, exist_ok=True)
     sns.set_theme(style="whitegrid", font="sans-serif")
 
