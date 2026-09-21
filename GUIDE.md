@@ -31,10 +31,9 @@ pip3 install numpy pandas matplotlib scipy seaborn
 
 ## 2. Directory Layout & Dataset Setup
 
-The refactored framework uses a modular structure:
+The project uses a clean modular structure at the repository root:
 
 ```
-refactored/
 ├── core/                               # Generic C++20 Algorithmic Engine
 │   ├── point.h                         # Point<Dim, Payload> abstraction (zero overhead)
 │   ├── hash_grid.h                     # Hash grid indexing, ArrayHasher, 3^D stencil offsets
@@ -51,31 +50,31 @@ refactored/
 ├── analyzer/                           # Statistical Analyzers & Plotting Scripts
 │   ├── analyze_rebuild_work_hypothesis.py # Invariance hypothesis & 2/3^D ratio validator
 │   └── run_analyzer.py                 # Multi-scale scaling and speedup analyzer
-└── storage/
-    ├── datasets/
-    │   ├── opensky/                    # Preprocessed 4D OpenSky binary datasets (*.bin)
-    │   └── synthetic/                  # Pre-generated / cached synthetic binary datasets (*.bin)
-    └── results/                        # Output CSV benchmark logs
+├── storage/
+│   ├── datasets/
+│   │   ├── opensky/                    # Preprocessed 4D OpenSky binary datasets (*.bin)
+│   │   └── synthetic/                  # Pre-generated / cached synthetic binary datasets (*.bin)
+│   └── results/                        # Output CSV benchmark logs
+└── legacy/                             # Archived exploratory scripts and historical experiments
 ```
 
 ### Dataset Availability
 - **Synthetic Datasets**: If not already present, `Space<Dim>::get_or_create()` will **automatically generate** uniform and adversarial spaces on-the-fly and cache them to disk.
-- **Real-World OpenSky Datasets**: Place the 5 hourly preprocessed `.bin` files (`states_2019-05-27-00_4d.bin` through `04_4d.bin`) into `refactored/storage/datasets/opensky/`. The loader automatically detects fallback search locations.
+- **Real-World OpenSky Datasets**: Place the 5 hourly preprocessed `.bin` files (`states_2019-05-27-00_4d.bin` through `04_4d.bin`) into `storage/datasets/opensky/`. The loader automatically detects fallback search locations.
 
 ---
 
 ## 3. Compilation
 
-Build the release binaries using CMake:
+Build the release binaries using CMake directly from the repository root:
 
 ```bash
-cd refactored
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 ```
 
-This will produce four optimized executables in `refactored/build/`:
+This will produce four optimized executables in `build/`:
 1. `bin_synthetic`: Baseline synthetic multi-scale benchmarks ($D=2 \dots 9$, Uniform, Sorted, Ladder of Pairs).
 2. `bin_opensky`: Real-world 4D flight collision detection benchmarks.
 3. `bin_rebuild_work`: Algorithmic cost deconstruction, $W$ vs $R$ invariance, and dimensional scaling ($D=2 \dots 11$).
@@ -85,7 +84,7 @@ This will produce four optimized executables in `refactored/build/`:
 
 ## 4. Running Experiments
 
-All commands below assume you are inside the `refactored/build/` directory (or passing relative paths from `refactored/`).
+All commands below assume you are inside the `build/` directory:
 
 ### Experiment A: Synthetic Benchmark Suite
 Runs standard uniform distributions, spatial sorting, and adversarial stress tests.
@@ -166,7 +165,6 @@ After generating benchmark CSVs, run the Python analyzers to reproduce tables, c
 Evaluates the core hypothesis: **Cumulative Rebuild Work ($W = \sum i_k$) is the true causal driver of runtime variance, while Rebuild Count ($R$) is statistically uncoupled.**
 
 ```bash
-cd /media/vithurshan/vithu/rand/refactored
 python3 analyzer/analyze_rebuild_work_hypothesis.py \
     storage/results/rebuild_work/rebuild_work_local_master.csv \
     --output-dir storage/results/rebuild_work/analysis

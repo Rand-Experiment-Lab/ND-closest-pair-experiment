@@ -268,25 +268,28 @@ def plot_cross_platform_comparison(local_df, server_df, output_dir):
     print("="*105)
 
 def main():
-    if len(sys.argv) < 2:
+    import argparse
+    parser = argparse.ArgumentParser(description="Rebuild Work Invariance Hypothesis Analyzer")
+    parser.add_argument("csv_path", nargs="?", default=None, help="Path to primary benchmark CSV file")
+    parser.add_argument("--compare", default=None, help="Path to secondary CSV file for cross-platform comparison")
+    parser.add_argument("--output-dir", default=None, help="Output directory for generated plots and summary CSVs")
+    args = parser.parse_args()
+
+    csv_path1 = args.csv_path
+    if not csv_path1:
         candidates = sorted(glob.glob('storage/results/rebuild_work/rebuild_work_*.csv'))
         if not candidates:
-            print("Usage: python3 analyze_rebuild_work_hypothesis.py <path_to_rebuild_work.csv> [<second_csv_for_comparison>]")
+            print("Error: No benchmark CSV found. Usage: python3 analyze_rebuild_work_hypothesis.py <path_to_rebuild_work.csv> [--compare <second_csv>] [--output-dir <dir>]")
             sys.exit(1)
         csv_path1 = candidates[-1]
-        csv_path2 = None
-    elif len(sys.argv) == 2:
-        csv_path1 = sys.argv[1]
-        csv_path2 = None
-    else:
-        csv_path1 = sys.argv[1]
-        csv_path2 = sys.argv[2]
+
+    csv_path2 = args.compare
 
     print(f"[Analyzer] Loading: {csv_path1}")
     df1 = parse_rebuild_benchmark_csv(csv_path1)
     summary_df1 = analyze_dataset_correlations(df1)
 
-    out_dir1 = os.path.splitext(csv_path1)[0] + "_analysis"
+    out_dir1 = args.output_dir if args.output_dir else (os.path.splitext(csv_path1)[0] + "_analysis")
     os.makedirs(out_dir1, exist_ok=True)
     summary_csv1 = os.path.join(out_dir1, "rebuild_work_vs_count_summary.csv")
     summary_df1.to_csv(summary_csv1, index=False)
@@ -307,7 +310,7 @@ def main():
         print(f"\n[Analyzer] Loading Second CSV for Cross-Platform Comparison: {csv_path2}")
         df2 = parse_rebuild_benchmark_csv(csv_path2)
         summary_df2 = analyze_dataset_correlations(df2)
-        cmp_dir = os.path.join(os.path.dirname(csv_path1), "local_vs_server_comparison")
+        cmp_dir = os.path.join(out_dir1, "local_vs_server_comparison")
         plot_cross_platform_comparison(summary_df1, summary_df2, cmp_dir)
 
 if __name__ == '__main__':
