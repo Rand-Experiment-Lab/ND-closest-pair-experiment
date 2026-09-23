@@ -9,10 +9,32 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
-#include <random>
+#if __has_include(<ranges>)
 #include <ranges>
-#include <unordered_map>
-#include <vector>
+#endif
+
+#if __has_include(<span>)
+#include <span>
+#else
+namespace std {
+template <typename T>
+class span {
+  const T *ptr_{nullptr};
+  std::size_t size_{0};
+public:
+  constexpr span() noexcept = default;
+  constexpr span(const T *ptr, std::size_t count) noexcept : ptr_(ptr), size_(count) {}
+  template <typename Container>
+  constexpr span(const Container &c) noexcept : ptr_(c.data()), size_(c.size()) {}
+  [[nodiscard]] constexpr const T &operator[](std::size_t idx) const noexcept { return ptr_[idx]; }
+  [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }
+  [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+  [[nodiscard]] constexpr const T *data() const noexcept { return ptr_; }
+  [[nodiscard]] constexpr const T *begin() const noexcept { return ptr_; }
+  [[nodiscard]] constexpr const T *end() const noexcept { return ptr_ + size_; }
+};
+}
+#endif
 
 #include "space.h"
 
@@ -72,9 +94,23 @@ template <std::size_t Dim>
 [[nodiscard]] GridCell<Dim> to_grid_cell(const Point<Dim> &point,
                                          float delta) noexcept {
   GridCell<Dim> cell{};
+  constexpr float min_delta = std::numeric_limits<float>::epsilon();
+  float safe_delta = (std::isnan(delta) || delta < min_delta) ? min_delta : delta;
+
+  constexpr double max_safe_int = static_cast<double>(std::numeric_limits<std::int64_t>::max() - 1024);
+  constexpr double min_safe_int = static_cast<double>(std::numeric_limits<std::int64_t>::min() + 1024);
+
   for (std::size_t d = 0; d < Dim; ++d) {
-    cell[d] =
-        static_cast<std::int64_t>(std::floor(point.coordinates[d] / delta));
+    double val = std::floor(static_cast<double>(point.coordinates[d]) / static_cast<double>(safe_delta));
+    if (std::isnan(val)) {
+      cell[d] = 0;
+    } else if (val >= max_safe_int) {
+      cell[d] = std::numeric_limits<std::int64_t>::max() - 1024;
+    } else if (val <= min_safe_int) {
+      cell[d] = std::numeric_limits<std::int64_t>::min() + 1024;
+    } else {
+      cell[d] = static_cast<std::int64_t>(val);
+    }
   }
   return cell;
 }
@@ -110,7 +146,7 @@ template <std::size_t Dim>
 // algorithm.
 template <std::size_t Dim>
 [[nodiscard]] float
-find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
+find_min_dist_grid_based(std::span<const Point<Dim>> points,
                          bool verbose = false,
                          std::size_t *out_rebuilds = nullptr) {
   if (out_rebuilds) {
@@ -126,8 +162,10 @@ find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
 
   // initial grid parameter distance between the first two points
   float delta = points[0].distance_to(points[1]);
-  if (delta == 0.0f) {
-    return 0.0f;
+  if (delta <= std::numeric_limits<float>::epsilon()) {
+    if (delta == 0.0f) {
+      return 0.0f;
+    }
   }
 
   GridHashMap<Dim> grid_map;
@@ -156,8 +194,8 @@ find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
       }
       delta = min_dist;
       grid_map.clear();
-      if (delta == 0.0f) {
-        return 0.0f;
+      if (delta <= std::numeric_limits<float>::epsilon()) {
+        return delta;
       }
 
       for (std::size_t j = 0; j <= i; ++j) {
@@ -167,6 +205,16 @@ find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
     }
   }
   return delta;
+}
+
+// vector overload for find_min_dist_grid_based
+template <std::size_t Dim>
+[[nodiscard]] float
+find_min_dist_grid_based(const std::vector<Point<Dim>> &points,
+                         bool verbose = false,
+                         std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based<Dim>(std::span<const Point<Dim>>(points),
+                                       verbose, out_rebuilds);
 }
 
 // overload for Space<Dim, Size> container.
@@ -179,20 +227,53 @@ find_min_dist_grid_based(const Space<Dim, Size> &space, bool verbose = false,
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
+// Pre-shuffled span interface separating shuffle latency and memory allocation from core grid timing
+template <std::size_t Dim>
+[[nodiscard]] float
+find_min_dist_grid_based_pre_shuffled(std::span<const Point<Dim>> points,
+                                      bool verbose = false,
+                                      std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based<Dim>(points, verbose, out_rebuilds);
+}
+
+// Pre-shuffled span overload of find_min_dist_grid_based_randomized
+template <std::size_t Dim>
+[[nodiscard]] float
+find_min_dist_grid_based_randomized(std::span<const Point<Dim>> pre_shuffled_points,
+                                    bool verbose = false,
+                                    std::size_t *out_rebuilds = nullptr) {
+  return find_min_dist_grid_based<Dim>(pre_shuffled_points, verbose, out_rebuilds);
+}
+
+// Full randomized grid function with separated timing hooks
 template <std::size_t Dim>
 [[nodiscard]] float
 find_min_dist_grid_based_randomized(std::vector<Point<Dim>> points,
                                     TimePoint *out_start, bool verbose = false,
-                                    std::size_t *out_rebuilds = nullptr) {
-  // capture the time after deep copy
+                                    std::size_t *out_rebuilds = nullptr,
+                                    TimePoint *out_end = nullptr) {
+  thread_local std::random_device rd;
+  std::array<std::uint32_t, 8> seed_data{};
+  for (auto &v : seed_data) {
+    v = rd();
+  }
+  std::seed_seq seq(seed_data.begin(), seed_data.end());
+  std::mt19937 g(seq);
+  std::shuffle(points.begin(), points.end(), g);
+
+  // Record start time strictly AFTER copy and shuffle, directly preceding core grid algorithm
   if (out_start) {
     *out_start = std::chrono::high_resolution_clock::now();
   }
 
-  thread_local std::random_device rd;
-  thread_local std::mt19937 g(rd());
-  std::shuffle(points.begin(), points.end(), g);
-  return find_min_dist_grid_based<Dim>(points, verbose, out_rebuilds);
+  float result = find_min_dist_grid_based<Dim>(std::span<const Point<Dim>>(points), verbose, out_rebuilds);
+
+  // Record end time strictly BEFORE points deallocation on function return
+  if (out_end) {
+    *out_end = std::chrono::high_resolution_clock::now();
+  }
+
+  return result;
 }
 
 template <std::size_t Dim>
@@ -200,17 +281,18 @@ template <std::size_t Dim>
 find_min_dist_grid_based_randomized(std::vector<Point<Dim>> points,
                                     bool verbose = false,
                                     std::size_t *out_rebuilds = nullptr) {
-  return find_min_dist_grid_based_randomized<Dim>(points, nullptr, verbose,
-                                                  out_rebuilds);
+  return find_min_dist_grid_based_randomized<Dim>(std::move(points), nullptr,
+                                                  verbose, out_rebuilds);
 }
 
 template <std::size_t Dim, std::size_t Size>
 [[nodiscard]] float
 find_min_dist_grid_based_randomized(const Space<Dim, Size> &space,
                                     TimePoint *out_start, bool verbose = false,
-                                    std::size_t *out_rebuilds = nullptr) {
+                                    std::size_t *out_rebuilds = nullptr,
+                                    TimePoint *out_end = nullptr) {
   return find_min_dist_grid_based_randomized<Dim>(space.points, out_start,
-                                                  verbose, out_rebuilds);
+                                                  verbose, out_rebuilds, out_end);
 }
 
 template <std::size_t Dim, std::size_t Size>
@@ -224,7 +306,7 @@ find_min_dist_grid_based_randomized(const Space<Dim, Size> &space,
 
 template <std::size_t Dim>
 [[nodiscard]] float
-find_min_dist_brute_force(const std::vector<Point<Dim>> &points) {
+find_min_dist_brute_force(std::span<const Point<Dim>> points) {
   const std::size_t size = points.size();
   float min_dist = std::numeric_limits<float>::infinity();
   for (std::size_t i = 0; i < size; ++i) {
@@ -236,6 +318,12 @@ find_min_dist_brute_force(const std::vector<Point<Dim>> &points) {
     }
   }
   return min_dist;
+}
+
+template <std::size_t Dim>
+[[nodiscard]] float
+find_min_dist_brute_force(const std::vector<Point<Dim>> &points) {
+  return find_min_dist_brute_force<Dim>(std::span<const Point<Dim>>(points));
 }
 
 template <std::size_t Dim, std::size_t Size>

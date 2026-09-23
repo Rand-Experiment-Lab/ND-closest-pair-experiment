@@ -1,0 +1,3 @@
+Timestamp,Benchmark_Type,Dataset_Name,Dimensions,Num_Points,Input_Order,Algorithm,Iterations,Min_Distance,Mean_Time_ms,Median_Time_ms,StdDev_Time_ms,Mean_Rebuilds,Median_Rebuilds,StdDev_Rebuilds,Raw_Times_ms,Extra_Metadata_JSON
+2026-09-19 11:08:35,CacheBenchmark,Uniform4D,4,10000,ContiguousSequential,Deterministic Grid,2,0.00000,14.30749,14.30749,1.65370,13.00,13.00,0.00,"[15.47683, 13.13815]","{""strategy"": ""sequential_contiguous""}"
+2026-09-19 11:08:35,CacheBenchmark,Uniform4D,4,10000,PreShuffledContiguous,Deterministic Grid,2,0.00000,13.20237,13.20237,1.50569,9.00,9.00,0.00,"[12.13768, 14.26705]","{""strategy"": ""preshuffled_contiguous""}"

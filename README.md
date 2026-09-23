@@ -1,119 +1,79 @@
-# N-Dimensional Closest Pair Experiment
+# N-Dimensional Closest Pair: Refactored & Modular Architecture v2.0
 
-Instructions to build, verify, and run performance benchmarks for the N-Dimensional Closest Pair project on Linux and Windows.
+This directory contains the cleanly refactored, production-ready implementation of the N-Dimensional Closest Pair engine, unifying synthetic multi-dimensional benchmarks and real-world 4D OpenSky flight collision detection under a zero-overhead generic core.
 
----
-
-## Prerequisites
-
-- **C++ Compiler**: C++20 standard support
-  - Linux: `g++` 10+ or `clang++` 11+
-  - Windows: Visual Studio 2022 (MSVC v143+) or MinGW-w64
-- **Build System**: CMake 3.10+
-- **Libraries**: Intel TBB (`tbb`)
-- **Python** *(optional for plotting)*: Python 3 with `pandas`, `matplotlib`, `seaborn`
+For a comprehensive walkthrough of experiment reproduction and hypothesis validation, see [**docs/GUIDE.md**](docs/GUIDE.md).
 
 ---
 
-## Linux Instructions
+## Directory Structure
 
-### 1. Install Dependencies
-
-```bash
-# Ubuntu / Debian
-sudo apt update
-sudo apt install build-essential cmake libtbb-dev python3 python3-pip
-pip install pandas matplotlib seaborn
 ```
-
-### 2. Build the Project
-
-```bash
-# Create build directory and compile
-cmake -B build -S .
-cmake --build build -j$(nproc)
-```
-
-### 3. Run Executables
-
-```bash
-# Verify correctness (Grid vs Brute Force baseline)
-./build/verify
-
-# Run quick benchmark verification (supports: 'normal', 'adversarial', or no argument for all)
-./build/experiment_quick
-./build/experiment_quick normal
-./build/experiment_quick adversarial
-
-# Run performance benchmark suite
-./build/experiment              # Runs both Normal (100k-1M) and Adversarial (10k-50k)
-./build/experiment normal       # Runs only Normal space experiments (Original & Sorted)
-./build/experiment adversarial  # Runs only Adversarial space experiments (Ladder of Pairs)
-
-# (Optional) Pre-generate binary dataset caches matching the experiment suites
-./build/data_set_generator
-
-# (Optional) Generate benchmark plots
-python3 plot_advanced.py
+├── core/                               # Generic C++20 Header-Only Algorithmic Engine
+│   ├── point.h                         # Point<Dim, Payload = EmptyPayload> with [[no_unique_address]] (0 overhead)
+│   ├── hash_grid.h                     # GridCell<Dim>, ArrayHasher, 3^D neighbor offsets generator
+│   ├── closest_pair.h                  # Deterministic & Randomized Rabin Solvers with PairFilter policy
+│   ├── space.h                         # Space<Dim, Payload>, Uniform & Adversarial Ladder generators
+│   └── metrics_logger.h                # Standardized 17-column CSV benchmark result logger
+│
+├── adapters/                           # Zero-Copy Domain Adapters
+│   └── opensky/
+│       └── opensky_adapter.h           # WGS-84 to ECEF + α·Δt metric coordinate transform & OPS2 loader
+│
+├── experiments/                        # Benchmark Executables & Drivers
+│   ├── synthetic/                      # benchmark_synthetic.cpp (D=2..9, Uniform & Adversarial)
+│   ├── opensky/                        # benchmark_opensky.cpp (4D real-world ADS-B telemetry)
+│   ├── rebuild_work/                   # benchmark_rebuild_work.cpp (D=2..11 Fixed vs Variable deconstruction)
+│   └── cache/                          # benchmark_cache.cpp (Hardware cache locality & memory layout)
+│
+├── storage/                            # Centralized Storage & Results
+│   ├── results/
+│   │   ├── synthetic/                  # Standardized synthetic benchmark CSVs & master log
+│   │   ├── opensky/                    # Standardized OpenSky telemetry benchmark CSVs
+│   │   ├── rebuild_work/               # Microarchitectural Fixed vs Variable deconstruction CSVs
+│   │   └── cache/                      # Cache miss and memory access profiling CSVs
+│   └── datasets/                       # Serialized binary datasets (.bin, git-ignored)
+│
+├── analyzer/                           # Academic-Grade Visualization & Analysis Pipeline
+│   ├── analyze_rebuild_work_hypothesis.py # Rebuild Work Invariance & 2/3^D Ratio Law analyzer
+│   └── run_analyzer.py                 # Universal ingestor generating heatmaps, exponents & scaling plots
+│
+├── docs/                               # Research Documentation & Guides
+│   ├── GUIDE.md                        # Step-by-step reproduction and setup guide
+│   ├── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Theoretical and empirical research report
+│   ├── DEVELOPER_DOCS.md               # Architecture and engineering reference
+│   ├── HEAVY_LOADERS_AND_CORRELATION_EXPLAINED.md # Microarchitectural bottleneck breakdown
+│   └── REBUILD_WORK_ANALYSIS.md        # Variance decomposition analysis
+│
+├── legacy/                             # Archived exploratory scripts and historical experiments
+└── CMakeLists.txt                      # Root build configuration
 ```
 
 ---
 
-## Windows Instructions
+## Quick Build & Execution
 
-### Option A: Using Visual Studio & Developer Command Prompt
-
-#### 1. Install Dependencies
-
-- Install **Visual Studio 2022** with the **Desktop development with C++** workload.
-- Install Intel TBB via vcpkg or NuGet:
-
-  ```cmd
-  vcpkg install tbb:x64-windows
-  ```
-
-#### 2. Build the Project
-
-Open **Developer Command Prompt for VS 2022** and run:
-
-```cmd
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build --config Release
-```
-
-#### 3. Run Executables
-
-```cmd
-:: Run verification
-.\build\Release\verify.exe
-
-:: Run quick benchmark
-.\build\Release\experiment_quick.exe
-
-:: Run full experiment suite
-.\build\Release\experiment.exe
-
-:: Generate plots
-python plot_advanced.py
-```
-
----
-
-### Option B: Using MSYS2 / MinGW-w64
-
-#### 1. Install Dependencies in MSYS2 UCRT64 Terminal
-
+### 1. Build
 ```bash
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-tbb python-pandas python-matplotlib python-seaborn
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j$(nproc)
 ```
 
-#### 2. Build and Run
-
+### 2. Run Benchmarks
 ```bash
-cmake -B build -S . -G "MinGW Makefiles"
-cmake --build build
+# Synthetic Suite (Uniform, Sorted, Adversarial)
+./bin_synthetic --iterations 5
 
-./build/verify.exe
-./build/experiment_quick.exe
-./build/experiment.exe
+# Real-World OpenSky 4D Telemetry Suite
+./bin_opensky --iterations 5
+
+# Rebuild Work Invariance & Dimensional Scaling Suite (D=2..11)
+./bin_rebuild_work --suite dim --min-dim 2 --max-dim 11 --iterations 10
+```
+
+### 3. Run Analysis & Generate Figures
+```bash
+cd /media/vithurshan/vithu/rand/refactored
+python3 analyzer/analyze_rebuild_work_hypothesis.py storage/results/rebuild_work/rebuild_work_local_master.csv --output-dir storage/results/rebuild_work/analysis
 ```

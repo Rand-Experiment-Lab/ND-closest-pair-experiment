@@ -1,18 +1,34 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
-project(ND-closest-pair-experiment)
+project(ND-closest-pair-refactored VERSION 2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(run main.cpp)
-target_link_libraries(run tbb)
-add_executable(experiment experiment.cpp)
-target_link_libraries(experiment tbb)
-add_executable(verify verify.cpp)
-target_link_libraries(verify tbb)
-add_executable(data_set_generator data_set_generator.cpp)
-target_link_libraries(data_set_generator tbb)
-add_executable(experiment_quick experiment_quick.cpp)
-target_link_libraries(experiment_quick tbb)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
+# Optimized release flags for modern SIMD / AVX2
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -Wall -Wextra")
+
+find_package(TBB REQUIRED)
+find_package(Threads REQUIRED)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+# ==============================================================================
+# Modular Core & Experiment Targets
+# ==============================================================================
+add_executable(bin_synthetic experiments/synthetic/benchmark_synthetic.cpp)
+target_link_libraries(bin_synthetic PRIVATE TBB::tbb Threads::Threads)
+
+add_executable(bin_opensky experiments/opensky/benchmark_opensky.cpp)
+target_link_libraries(bin_opensky PRIVATE TBB::tbb Threads::Threads)
+
+add_executable(bin_cache experiments/cache/benchmark_cache.cpp)
+target_link_libraries(bin_cache PRIVATE TBB::tbb Threads::Threads)
+
+add_executable(bin_rebuild_work experiments/rebuild_work/benchmark_rebuild_work.cpp)
+target_link_libraries(bin_rebuild_work PRIVATE TBB::tbb Threads::Threads)
