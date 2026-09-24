@@ -40,6 +40,7 @@ For a comprehensive walkthrough of experiment reproduction and hypothesis valida
 │
 ├── docs/                               # Research Documentation & Guides
 │   ├── GUIDE.md                        # Step-by-step reproduction and setup guide
+│   ├── OPENSKY_133M_EXPERIMENT_ANALYSIS.md # Detailed 133M Monolith vs 66-hour longitudinal analysis
 │   ├── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Theoretical and empirical research report
 │   ├── DEVELOPER_DOCS.md               # Architecture and engineering reference
 │   ├── HEAVY_LOADERS_AND_CORRELATION_EXPLAINED.md # Microarchitectural bottleneck breakdown
