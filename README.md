@@ -40,6 +40,7 @@ For a comprehensive walkthrough of experiment reproduction and hypothesis valida
 │
 ├── docs/                               # Research Documentation & Guides
 │   ├── GUIDE.md                        # Step-by-step reproduction and setup guide
+│   ├── ACADEMIC_NOVELTY_AND_LITERATURE_AUDIT.md # Prior literature audit, proofs, and novelty assessment
 │   ├── OPENSKY_133M_EXPERIMENT_ANALYSIS.md # Detailed 133M Monolith vs 66-hour longitudinal analysis
 │   ├── FINAL_RESEARCH_REPORT_RANDOMIZATION.md # Theoretical and empirical research report
 │   ├── DEVELOPER_DOCS.md               # Architecture and engineering reference
